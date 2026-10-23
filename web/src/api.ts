@@ -9,7 +9,7 @@ import type { StreamEvent } from './report-model';
 
 export function demoName(): string | null {
   const demo = new URLSearchParams(window.location.search).get('demo');
-  return demo && demo in SCAN_FIXTURES ? demo : demo === '1' ? 'protected' : null;
+  return demo && demo in SCAN_FIXTURES ? demo : demo === '1' ? 'no-patch' : null;
 }
 
 export interface ScanHandle {
@@ -20,7 +20,7 @@ const DEMO_DELAY_MS = 90;
 /** Live events are released to the view at this pace so a fast host still shows the ring climbing. */
 const LIVE_PACE_MS = 70;
 
-export function startScan(host: string, onEvent: (e: StreamEvent) => void, onEnd: () => void): ScanHandle {
+export function startScan(host: string, validate: boolean, onEvent: (e: StreamEvent) => void, onEnd: () => void): ScanHandle {
   const demo = demoName();
   if (demo) return replayFixture(demo, host, onEvent, onEnd);
 
@@ -31,7 +31,7 @@ export function startScan(host: string, onEvent: (e: StreamEvent) => void, onEnd
       const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ host }),
+        body: JSON.stringify({ host, validate }),
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -68,36 +68,36 @@ export function startScan(host: string, onEvent: (e: StreamEvent) => void, onEnd
   };
 }
 
-/** Worse to better: the start, legacy and classical answers, then the hybrid ones, then the connection and the result. */
+/** The order the reader sees: the start, what the host said of itself, the probe rows, the validation, then the result. */
 function displayRank(e: StreamEvent): number {
   switch (e.type) {
     case 'start':
       return 0;
+    case 'fingerprint':
+      return 1;
     case 'probe':
-      if (e.id === 'rsa-transport' || e.id === 'tls12') return 1;
-      if (e.id === 'tls13') return 2;
-      if (e.id.startsWith('group:') && !/MLKEM|Kyber/.test(e.id)) return 3;
-      if (e.id === 'modern') return 4;
+      return e.id === 'validation' ? 4 : e.id === 'home' ? 2 : 3;
+    case 'validation':
       return 5;
-    case 'connection':
-      return 6;
     case 'assessment':
     case 'done':
-      return 7;
+      return 6;
     case 'result':
-      return 8;
+      return 7;
     case 'saved':
-      return 9;
+      return 8;
     default:
-      return 10;
+      return 9;
   }
 }
 
 function replayFixture(name: string, host: string, onEvent: (e: StreamEvent) => void, onEnd: () => void): ScanHandle {
   const fixture = SCAN_FIXTURES[name];
   const alias = fixture.result.target.host;
-  const rename = <T,>(v: T): T => JSON.parse(JSON.stringify(v).replaceAll(alias, host)) as T;
-  // Shown in the same worse-to-better order as a live scan.
+  // The typed host may carry a port; the fixture keeps its own port and takes only the name.
+  const bare = host.replace(/:\d+$/, '');
+  const rename = <T,>(v: T): T => JSON.parse(JSON.stringify(v).replaceAll(alias, bare)) as T;
+  // Shown in the same order as a live scan.
   const recorded: StreamEvent[] = [...fixture.events.map(rename), { type: 'result', result: rename(fixture.result) }, { type: 'saved', id: `demo-${name}` }];
   const events = recorded
     .map((e, i) => ({ e, i }))
@@ -144,10 +144,4 @@ export async function loadMetrics(): Promise<MetricsData | { error: string }> {
   const res = await fetch('/api/metrics');
   if (!res.ok) return { error: `Metrics could not be loaded (${res.status}).` };
   return (await res.json()) as MetricsData;
-}
-
-export async function subscribe(email: string, host: string): Promise<boolean> {
-  if (demoName()) return true;
-  const res = await fetch('/api/subscribe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, host }) });
-  return res.ok;
 }

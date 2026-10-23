@@ -21,7 +21,7 @@ describe('scan against the HTTP fixture', () => {
     const result = await scan({ host: '127.0.0.1', port }, { allowPrivate: true, onEvent: (e) => events.push(e) });
 
     expect(events[0]).toMatchObject({ type: 'start', target: { host: '127.0.0.1', port }, address: '127.0.0.1', validate: false });
-    expect(events.map((e) => e.type)).toEqual(['start', 'probe', 'probe', 'fingerprint', 'assessment', 'done']);
+    expect(events.map((e) => e.type)).toEqual(['start', 'fingerprint', 'probe', 'probe', 'assessment', 'done']);
     const probes = events.filter((e) => e.type === 'probe');
     expect(probes[0]).toMatchObject({ id: 'home', answer: 'yes' });
     expect(probes[1]).toMatchObject({ id: 'egg', answer: 'yes' });
@@ -49,7 +49,7 @@ describe('scan against the HTTP fixture', () => {
       { host: '127.0.0.1', port },
       { allowPrivate: true, validate: true, payloadBytes: 2 * 1024 * 1024, baselineBytes: 64 * 1024, onEvent: (e) => events.push(e) },
     );
-    expect(events.map((e) => e.type)).toEqual(['start', 'probe', 'probe', 'fingerprint', 'probe', 'validation', 'assessment', 'done']);
+    expect(events.map((e) => e.type)).toEqual(['start', 'fingerprint', 'probe', 'probe', 'validation', 'probe', 'assessment', 'done']);
     expect(events.find((e) => e.type === 'probe' && e.id === 'validation')).toMatchObject({ answer: 'yes' });
     expect(result.validate).toBe(true);
     expect(result.findings.validation?.verdict).toBe('triggered');

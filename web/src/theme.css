@@ -13,11 +13,12 @@
   --accent-text: color-mix(in oklab, var(--accent) 85%, white);
 
   --stage-unreachable: color-mix(in oklab, var(--text-faint) 80%, black);
-  --stage-inconclusive: var(--text-faint);
-  --stage-exposed: #e05a4f;
-  --stage-at-risk: var(--accent);
-  --stage-protected: #43b48a;
-  --stage-ready: #8fe0c0;
+  --stage-not-php: var(--text-faint);
+  --stage-no-patch: #e05a4f;
+  --stage-exposed: #e8775f;
+  --stage-hidden: var(--accent);
+  --stage-not-affected: #43b48a;
+  --stage-protected: #8fe0c0;
 
   --font-ui: 'Titillium Web', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -637,7 +638,7 @@ code,
 }
 
 .answer-warn {
-  color: var(--stage-at-risk);
+  color: var(--stage-hidden);
 }
 
 .table .dim {
@@ -1428,4 +1429,40 @@ details.tech summary {
 
 .print-footer {
   display: none;
+}
+
+/* The consent line under the field: a real checkbox, the hint in the faint voice. */
+.consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(720px, 100%);
+  margin-top: 10px;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  text-align: left;
+  cursor: pointer;
+}
+
+.consent input {
+  margin: 4px 0 0;
+  accent-color: var(--accent);
+  flex: none;
+}
+
+.consent .hint {
+  display: block;
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+
+/* A ring with no score: the word alone, the number hidden. */
+.ring.no-score .number {
+  display: none;
+}
+
+/* The host and its address under the ring: each stays whole, the line breaks between them. */
+.target-line .nowrap {
+  white-space: nowrap;
 }

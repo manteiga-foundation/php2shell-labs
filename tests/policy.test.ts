@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { addressesFromDoh, decideRateLimit, isFresh, newShareId, previewFor, RATE_LIMITS, scanError, studyClient } from '../worker/src/policy';
+import { addressesFromDoh, cacheServes, decideRateLimit, isFresh, newShareId, previewFor, RATE_LIMITS, scanError } from '../worker/src/policy';
 import protectedFixture from '../web/src/fixtures/protected.json';
+import noPatchFixture from '../web/src/fixtures/no-patch.json';
+import { MESSAGES } from '../web/src/i18n/messages';
+
+const ORIGIN = 'https://php2shell-labs.example';
 
 describe('edge policy', () => {
   test('DNS-over-HTTPS answers are reduced to addresses, CNAMEs skipped', () => {
@@ -9,7 +13,7 @@ describe('edge policy', () => {
     expect(addressesFromDoh({ Status: 3 })).toEqual([]);
   });
 
-  test('rate limits: a caller gets a burst, then waits; a host is not hammered either', () => {
+  test('rate limits: a caller gets a burst, then waits; a host is not hammered; validations are tighter still', () => {
     const now = 1_000_000;
     expect(decideRateLimit({ kind: 'caller', count: 0, windowStart: now, now })).toEqual({ allowed: true });
     expect(decideRateLimit({ kind: 'caller', count: RATE_LIMITS.caller.max, windowStart: now, now })).toMatchObject({ allowed: false });
@@ -18,12 +22,23 @@ describe('edge policy', () => {
     // The window expired: counting starts again.
     expect(decideRateLimit({ kind: 'caller', count: 999, windowStart: now - RATE_LIMITS.caller.windowS * 1000 - 1, now })).toEqual({ allowed: true, reset: true });
     expect(decideRateLimit({ kind: 'host', count: RATE_LIMITS.host.max, windowStart: now, now })).toMatchObject({ allowed: false });
+    expect(RATE_LIMITS.validation.max).toBeLessThan(RATE_LIMITS.caller.max);
+    expect(decideRateLimit({ kind: 'validation', count: RATE_LIMITS.validation.max, windowStart: now, now })).toMatchObject({ allowed: false });
+    expect(RATE_LIMITS.caller.windowS).toBe(3600);
   });
 
   test('a cached result is fresh for 24 hours', () => {
-    const created = Date.parse('2026-10-18T10:00:00Z');
-    expect(isFresh(created, Date.parse('2026-10-18T22:00:00Z'))).toBe(true);
-    expect(isFresh(created, Date.parse('2026-10-19T10:00:01Z'))).toBe(false);
+    const created = Date.parse('2026-10-23T10:00:00Z');
+    expect(isFresh(created, Date.parse('2026-10-23T22:00:00Z'))).toBe(true);
+    expect(isFresh(created, Date.parse('2026-10-24T10:00:01Z'))).toBe(false);
+  });
+
+  test('a consented validation always runs fresh; a plain exposure request is served from any fresh result', () => {
+    const created = Date.parse('2026-10-23T10:00:00Z');
+    const now = Date.parse('2026-10-23T11:00:00Z');
+    expect(cacheServes({ requestValidate: false, createdAtMs: created, nowMs: now })).toBe(true);
+    expect(cacheServes({ requestValidate: true, createdAtMs: created, nowMs: now })).toBe(false);
+    expect(cacheServes({ requestValidate: false, createdAtMs: created, nowMs: now + 2 * 86400_000 })).toBe(false);
   });
 
   test('share ids are short, URL-safe and unpredictable', () => {
@@ -33,39 +48,35 @@ describe('edge policy', () => {
   });
 
   test('the link preview carries the host, the stage word and the verdict', () => {
-    const p = previewFor(protectedFixture.result as never, 'abc123XYZ_-1', 'https://quantumreadylabs.com');
-    expect(p.title).toBe('protected.example is PROTECTED · Quantum Ready Labs');
-    expect(p.description).toContain('protected against future quantum decryption');
-    expect(p.image).toBe('https://quantumreadylabs.com/og/protected.png');
-    expect(p.url).toBe('https://quantumreadylabs.com/r/abc123XYZ_-1');
+    const p = previewFor(protectedFixture.result as never, 'abc123XYZ_-1', ORIGIN);
+    expect(p.title).toBe('protected.example is PROTECTED · PHP2Shell Labs');
+    expect(p.description).toContain('not exposed to PHP2Shell');
+    expect(p.image).toBe(`${ORIGIN}/og/protected.png`);
+    expect(p.url).toBe(`${ORIGIN}/r/abc123XYZ_-1`);
+    const q = previewFor(noPatchFixture.result as never, 'abc123XYZ_-1', ORIGIN);
+    expect(q.title).toBe('no-patch.example:80 is NO PATCH · PHP2Shell Labs');
+    expect(q.image).toBe(`${ORIGIN}/og/no-patch.png`);
   });
 
   test('a shared link opened in another language previews in that language, at its own address', () => {
-    const p = previewFor(protectedFixture.result as never, 'abc123XYZ_-1', 'https://quantumreadylabs.com', 'es');
-    expect(p.title).toBe('protected.example está PROTEGIDO · Quantum Ready Labs');
-    expect(p.description).toContain('protegidas frente al descifrado cuántico futuro');
-    expect(p.description).toContain('Siguiente paso: Retire los conjuntos de cifrado');
-    expect(p.url).toBe('https://quantumreadylabs.com/es/r/abc123XYZ_-1');
+    const es = MESSAGES.es;
+    const p = previewFor(protectedFixture.result as never, 'abc123XYZ_-1', ORIGIN, 'es');
+    expect(p.title).toBe(`${es.meta.shareTitle('protected.example', es.stage.label.protected)} · PHP2Shell Labs`);
+    expect(p.description).toContain(es.report.verdict.protected);
+    expect(p.description).toContain(es.report.steps['keep-current'].title);
+    expect(p.url).toBe(`${ORIGIN}/es/r/abc123XYZ_-1`);
   });
 
   test('a refusal carries English words for scripts and a code with params for the page', () => {
-    expect(scanError('port-not-allowed', { port: 8443, allowed: [443] })).toEqual({
-      error: 'The public scanner tests port 443 only. Port 8443 was asked for and noted.',
+    expect(scanError('port-not-allowed', { port: 8443, allowed: [80, 443] })).toEqual({
+      error: 'The public scanner tests ports 80 and 443 only. Port 8443 was asked for and noted.',
       code: 'port-not-allowed',
-      params: { port: 8443, allowed: [443] },
+      params: { port: 8443, allowed: [80, 443] },
     });
     expect(scanError('rate-caller')).toEqual({ error: 'Too many scans from your address. Please wait a few minutes.', code: 'rate-caller', params: {} });
+    expect(scanError('rate-validation').error).toMatch(/validations/);
     expect(scanError('not-public', { host: 'a.example', address: '10.0.0.1' }).error).toBe(
       'a.example resolves to 10.0.0.1, which is not a public Internet address. The public scanner tests only public hosts.',
     );
-  });
-
-  test('study rows are tagged by a strict slug so they never mix with organic scans', () => {
-    expect(studyClient('florida-financial-2026q4')).toBe('study:florida-financial-2026q4');
-    expect(studyClient('Web')).toBeNull();
-    expect(studyClient('web')).toBe('study:web'); // still distinct from the organic client 'web'
-    expect(studyClient('a')).toBeNull();
-    expect(studyClient('drop table; --')).toBeNull();
-    expect(studyClient(42)).toBeNull();
   });
 });

@@ -6,9 +6,8 @@ import type { ScanResult } from '../../engine/events';
 import { isCanonicalIpv4, isPublicAddress, parseTarget, TargetError } from '../../engine/target';
 import { SCAN_FIXTURES } from '../../web/src/fixtures';
 import { splitPath } from '../../web/src/i18n/locales';
-import { STUDY_META, studyPreview } from '../../web/src/study-model';
 import { localizePage, sitemapXml } from './locale-page';
-import { addressesFromDoh, decideRateLimit, escapeAttr, isFresh, newShareId, previewFor, scanError, studyClient, type RateKind } from './policy';
+import { addressesFromDoh, cacheServes, decideRateLimit, escapeAttr, newShareId, previewFor, scanError, type RateKind } from './policy';
 
 export interface Env {
   DB: D1Database;
@@ -17,8 +16,6 @@ export interface Env {
   ENGINE_TOKEN: string;
   RENDER_URL: string;
   RENDER_TOKEN: string;
-  /** Lets the maintainer's batch script scan a named population; rows are tagged study:<slug>. */
-  STUDY_TOKEN: string;
   PUBLIC_ORIGIN: string;
   ALLOWED_PORTS: string;
 }
@@ -47,7 +44,7 @@ export default {
 
     if (pathname === '/sitemap.xml') {
       const origin = env.PUBLIC_ORIGIN || url.origin;
-      return new Response(sitemapXml(origin, Object.keys(STUDY_META)), { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
+      return new Response(sitemapXml(origin), { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
     }
 
     // Pages: the same views under every language prefix (/es/, /pt/ ...); English has none.
@@ -57,9 +54,6 @@ export default {
       warmRenderer(env, ctx);
       return sharedPage(shared[1], request, env);
     }
-
-    const study = rest.match(/^\/studies\/([a-z0-9-]+)$/);
-    if (study && request.method === 'GET') return studyPage(study[1], request, env);
 
     if (rest === '/metrics') {
       // Cloudflare Access fronts this path; this is the belt to its braces.
@@ -110,13 +104,15 @@ async function recordFailure(env: Env, reason: string, detail: string | null, po
 }
 
 async function scanRoute(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  let body: { host?: unknown };
+  let body: { host?: unknown; validate?: unknown };
   try {
-    body = (await request.json()) as { host?: unknown };
+    body = (await request.json()) as { host?: unknown; validate?: unknown };
   } catch {
     return json({ error: 'The request body must be JSON.' }, 400);
   }
   if (typeof body.host !== 'string') return json({ error: 'host is required' }, 400);
+  // Consent to the exploit validation travels as a boolean and nothing else counts as consent.
+  const validate = body.validate === true;
 
   let target;
   try {
@@ -128,7 +124,7 @@ async function scanRoute(request: Request, env: Env, ctx: ExecutionContext): Pro
     }
     throw e;
   }
-  const allowedPorts = (env.ALLOWED_PORTS ?? '443').split(',').map((p) => Number(p.trim()));
+  const allowedPorts = (env.ALLOWED_PORTS ?? '80,443').split(',').map((p) => Number(p.trim()));
   if (!allowedPorts.includes(target.port)) {
     ctx.waitUntil(recordFailure(env, 'Port not allowed', String(target.port), target.port));
     return json(scanError('port-not-allowed', { port: target.port, allowed: allowedPorts }), 400);
@@ -137,19 +133,24 @@ async function scanRoute(request: Request, env: Env, ctx: ExecutionContext): Pro
   const ip = clientIp(request);
   const callerLimit = await rateCheck(env, 'caller', ip);
   if (!callerLimit.allowed) return json(scanError('rate-caller'), 429, { 'retry-after': String(callerLimit.retryAfterS) });
+  if (validate) {
+    const validationLimit = await rateCheck(env, 'validation', ip);
+    if (!validationLimit.allowed) return json(scanError('rate-validation'), 429, { 'retry-after': String(validationLimit.retryAfterS) });
+  }
 
   const hostKey = `${target.host}:${target.port}`;
   const encoder = new TextEncoder();
   const country = request.headers.get('cf-ipcountry');
   const referrer = refererHost(request.headers.get('referer'));
 
-  // The cache: a fresh result for this host is answered at once, as a two-line stream.
+  // The cache: a fresh exposure result for this host is answered at once, as a two-line stream.
+  // A consented validation always runs fresh.
   const cached = await env.DB.prepare('SELECT id, created_at, result FROM scans WHERE host = ? AND port = ? AND cache_hit = 0 ORDER BY created_at DESC LIMIT 1')
     .bind(target.host, target.port)
     .first<{ id: string; created_at: number; result: string }>();
-  if (cached && isFresh(cached.created_at, Date.now())) {
+  if (cached && cacheServes({ requestValidate: validate, createdAtMs: cached.created_at, nowMs: Date.now() })) {
     ctx.waitUntil(
-      env.DB.prepare('INSERT INTO scans (id, host, port, address, stage, score, ms, created_at, result, country, referrer, client, cache_hit) SELECT ?, host, port, address, stage, score, ms, ?, result, ?, ?, ?, 1 FROM scans WHERE id = ?')
+      env.DB.prepare('INSERT INTO scans (id, host, port, address, stage, score, ms, created_at, result, country, referrer, client, cache_hit, validate) SELECT ?, host, port, address, stage, score, ms, ?, result, ?, ?, ?, 1, validate FROM scans WHERE id = ?')
         .bind(newShareId(), Date.now(), country, referrer, 'web', cached.id)
         .run(),
     );
@@ -175,7 +176,7 @@ async function scanRoute(request: Request, env: Env, ctx: ExecutionContext): Pro
   const upstream = await fetch(`${env.ENGINE_URL}/scan`, {
     method: 'POST',
     headers: { authorization: `Bearer ${env.ENGINE_TOKEN}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ host: target.host, port: target.port }),
+    body: JSON.stringify({ host: target.host, port: target.port, validate }),
   });
   if (!upstream.ok || !upstream.body) {
     const detail = (await upstream.json().catch(() => ({}))) as { error?: string };
@@ -215,61 +216,15 @@ async function scanRoute(request: Request, env: Env, ctx: ExecutionContext): Pro
     flush() {
       if (result) {
         ctx.waitUntil(
-          env.DB.prepare('INSERT INTO scans (id, host, port, address, stage, score, ms, created_at, result, country, referrer, client, cache_hit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)')
-            .bind(id, target.host, target.port, result.address, result.assessment.stage, result.assessment.score, result.ms, Date.now(), JSON.stringify(result), country, referrer, 'web')
+          env.DB.prepare('INSERT INTO scans (id, host, port, address, stage, score, ms, created_at, result, country, referrer, client, cache_hit, validate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)')
+            .bind(id, target.host, target.port, result.address, result.assessment.stage, result.assessment.score, result.ms, Date.now(), JSON.stringify(result), country, referrer, 'web', validate ? 1 : 0)
             .run(),
         );
-        if (result.assessment.stage === 'unreachable') ctx.waitUntil(recordFailure(env, 'Port closed or no TLS', target.host, target.port));
+        if (result.assessment.stage === 'unreachable') ctx.waitUntil(recordFailure(env, 'No web server answered', target.host, target.port));
       }
     },
   });
   return new Response(upstream.body.pipeThrough(transform), { headers: { 'content-type': 'application/x-ndjson', 'cache-control': 'no-store' } });
-}
-
-/**
- * A study scan: the maintainer's batch tool scanning a named population. No rate limit, no cache
- * read, and the row is tagged `study:<slug>` so it never counts as organic use. Answers when the
- * scan is complete.
- */
-async function studyScanRoute(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  if (!env.STUDY_TOKEN || request.headers.get('authorization') !== `Bearer ${env.STUDY_TOKEN}`) return json({ error: 'unauthorized' }, 401);
-  let body: { host?: unknown; study?: unknown; name?: unknown };
-  try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    return json({ error: 'The request body must be JSON.' }, 400);
-  }
-  const client = studyClient(body.study);
-  if (!client) return json({ error: 'study must be a slug: lower-case letters, digits and dashes' }, 400);
-  if (typeof body.host !== 'string') return json({ error: 'host is required' }, 400);
-  let target;
-  try {
-    target = parseTarget(body.host);
-  } catch (e) {
-    if (e instanceof TargetError) return json({ error: e.message, refused: true }, 400);
-    throw e;
-  }
-  const addresses = await resolvePublic(target.host);
-  if (addresses.length === 0) return json({ error: `${target.host} does not resolve to any address.`, refused: true }, 400);
-  const refused = addresses.find((a) => !isPublicAddress(a));
-  if (refused) return json({ error: `${target.host} resolves to ${refused}, which is not a public Internet address.`, refused: true }, 400);
-
-  const upstream = await fetch(`${env.ENGINE_URL}/scan`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${env.ENGINE_TOKEN}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ host: target.host, port: target.port }),
-  });
-  if (!upstream.ok) return json({ error: upstream.status === 429 ? 'The scanner is busy. Please try again in a moment.' : `engine answered ${upstream.status}` }, upstream.status === 429 ? 429 : 502, upstream.status === 429 ? { 'retry-after': '3' } : {});
-  const lines = (await upstream.text()).split('\n').filter((l) => l.trim());
-  const last = lines.length ? (JSON.parse(lines.at(-1)!) as { type: string; result?: ScanResult; error?: string }) : null;
-  if (!last || last.type !== 'result' || !last.result) return json({ error: last?.error ?? 'the engine did not finish the scan' }, 502);
-  const result = last.result;
-  const id = newShareId();
-  await env.DB.prepare('INSERT INTO scans (id, host, port, address, stage, score, ms, created_at, result, country, referrer, client, cache_hit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)')
-    .bind(id, target.host, target.port, result.address, result.assessment.stage, result.assessment.score, result.ms, Date.now(), JSON.stringify(result), null, typeof body.name === 'string' ? body.name.slice(0, 120) : null, client)
-    .run();
-  ctx.waitUntil(Promise.resolve());
-  return json({ id, host: target.host, port: target.port, stage: result.assessment.stage, score: result.assessment.score, nextStep: result.assessment.nextStep.title, ms: result.ms });
 }
 
 function refererHost(referer: string | null): string | null {
@@ -305,19 +260,17 @@ async function api(pathname: string, request: Request, env: Env, ctx: ExecutionC
     return wantsOneAnswer(request) ? oneAnswer(res, url.origin, env) : res;
   }
   if (pathname === '/api/scan' && request.method === 'GET') {
-    // The shell form: curl 'https://quantumreadylabs.com/api/scan?host=example.com'
+    // The shell form: curl 'https://<origin>/api/scan?host=example.com[&validate=1]'
     const host = url.searchParams.get('host');
     if (!host) return json({ error: 'host is required: /api/scan?host=example.com' }, 400);
     warmRenderer(env, ctx);
-    const asPost = new Request(request.url, { method: 'POST', headers: request.headers, body: JSON.stringify({ host }) });
+    const asPost = new Request(request.url, { method: 'POST', headers: request.headers, body: JSON.stringify({ host, validate: url.searchParams.get('validate') === '1' }) });
     return oneAnswer(await scanRoute(asPost, env, ctx), url.origin, env);
   }
-  if (pathname === '/api/study/scan' && request.method === 'POST') return studyScanRoute(request, env, ctx);
   if (pathname.startsWith('/api/result/') && request.method === 'GET') return resultRoute(pathname.slice('/api/result/'.length), env, ctx);
   const pdf = pathname.match(/^\/api\/report\/([A-Za-z0-9_-]+)\.pdf$/);
   if (pdf && request.method === 'GET') return reportPdfRoute(pdf[1], request, env, ctx);
   if (pathname === '/api/metrics' && request.method === 'GET') return metricsRoute(request, env);
-  if (pathname === '/api/subscribe' && request.method === 'POST') return subscribeRoute(request, env);
   if (pathname === '/api/health') return json({ ok: true });
   return json({ error: 'not found', documentation: `${url.origin}/api`, openapi: `${url.origin}/openapi.json` }, 404);
 }
@@ -390,7 +343,7 @@ async function reportPdfRoute(id: string, request: Request, env: Env, ctx: Execu
   const response = new Response(upstream.body, {
     headers: {
       'content-type': 'application/pdf',
-      'content-disposition': upstream.headers.get('content-disposition') ?? `attachment; filename="quantum-readiness-${id}.pdf"`,
+      'content-disposition': upstream.headers.get('content-disposition') ?? `attachment; filename="php2shell-exposure-${id}.pdf"`,
       'cache-control': 'public, max-age=604800',
     },
   });
@@ -406,16 +359,6 @@ async function sharedPage(id: string, request: Request, env: Env): Promise<Respo
   if (!row) return index;
   const preview = previewFor(JSON.parse(row.result) as ScanResult, id, origin, splitPath(url.pathname).locale);
   return withPreview(index, preview, `<meta name="robots" content="noindex" data-shared="${escapeAttr(id)}">`);
-}
-
-/** A study's page: the index with the note's title, description and image, indexable. */
-async function studyPage(slug: string, request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  const origin = env.PUBLIC_ORIGIN || url.origin;
-  const index = localizePage(await env.ASSETS.fetch(new Request(new URL('/', request.url), { headers: request.headers })), url.pathname, origin);
-  const preview = studyPreview(slug, origin, splitPath(url.pathname).locale);
-  if (!preview) return index;
-  return withPreview(index, preview);
 }
 
 function withPreview(index: Response, preview: { title: string; description: string; image: string; url: string }, headExtra?: string): Response {
@@ -449,28 +392,24 @@ async function metricsRoute(request: Request, env: Env): Promise<Response> {
             COUNT(*) AS scans,
             COUNT(DISTINCT host || ':' || port) AS hosts,
             SUM(cache_hit) AS cache_hits,
-            SUM(stage = 'exposed') AS exposed, SUM(stage = 'at-risk') AS at_risk, SUM(stage = 'protected') AS protected, SUM(stage = 'ready') AS ready,
-            SUM(stage = 'unreachable' OR stage = 'inconclusive') AS odd
+            SUM(validate) AS validations,
+            SUM(stage = 'no-patch') AS no_patch, SUM(stage = 'exposed') AS exposed, SUM(stage = 'hidden') AS hidden,
+            SUM(stage = 'not-affected') AS not_affected, SUM(stage = 'protected') AS protected, SUM(stage = 'not-php') AS not_php,
+            SUM(stage = 'unreachable') AS odd
      FROM scans WHERE created_at >= ? AND client = 'web' GROUP BY day ORDER BY day`,
   )
     .bind(since)
-    .all<{ day: string; scans: number; hosts: number; cache_hits: number; exposed: number; at_risk: number; protected: number; ready: number; odd: number }>();
+    .all<{ day: string; scans: number; hosts: number; cache_hits: number; validations: number; no_patch: number; exposed: number; hidden: number; not_affected: number; protected: number; not_php: number; odd: number }>();
   const failuresByDay = await env.DB.prepare(`SELECT date(created_at / 1000, 'unixepoch') AS day, COUNT(*) AS n FROM failures WHERE created_at >= ? GROUP BY day`).bind(since).all<{ day: string; n: number }>();
   const failures = await env.DB.prepare('SELECT reason, COUNT(*) AS count FROM failures WHERE created_at >= ? GROUP BY reason ORDER BY count DESC').bind(since).all<{ reason: string; count: number }>();
   const referrers = await env.DB.prepare("SELECT COALESCE(referrer, 'Direct') AS source, COUNT(*) AS count FROM scans WHERE created_at >= ? AND client = 'web' GROUP BY source ORDER BY count DESC LIMIT 8").bind(since).all<{ source: string; count: number }>();
   const countries = await env.DB.prepare("SELECT COALESCE(country, 'Unknown') AS country, COUNT(*) AS count FROM scans WHERE created_at >= ? AND client = 'web' GROUP BY country ORDER BY count DESC LIMIT 8").bind(since).all<{ country: string; count: number }>();
   const timings = await env.DB.prepare("SELECT ms FROM scans WHERE created_at >= ? AND cache_hit = 0 AND ms IS NOT NULL AND client = 'web' ORDER BY ms").bind(now - 86400_000).all<{ ms: number }>();
-  const studies = await env.DB.prepare(
-    `SELECT substr(client, 7) AS study, COUNT(*) AS scans, COUNT(DISTINCT host) AS hosts, MIN(created_at) AS firstAt, MAX(created_at) AS lastAt,
-            SUM(stage = 'exposed') AS exposed, SUM(stage = 'at-risk') AS at_risk, SUM(stage = 'protected') AS protected, SUM(stage = 'ready') AS ready, SUM(stage = 'unreachable' OR stage = 'inconclusive') AS odd
-     FROM scans WHERE client LIKE 'study:%' GROUP BY client ORDER BY lastAt DESC`,
-  ).all<{ study: string; scans: number; hosts: number; firstAt: number; lastAt: number; exposed: number; at_risk: number; protected: number; ready: number; odd: number }>();
   const opens = await env.DB.prepare('SELECT COUNT(*) AS n FROM opens WHERE created_at >= ?').bind(since).first<{ n: number }>();
   const downloads = await env.DB.prepare('SELECT COUNT(*) AS n FROM downloads WHERE created_at >= ?').bind(since).first<{ n: number }>();
-  const scores = await env.DB.prepare("SELECT score FROM scans WHERE created_at >= ? AND cache_hit = 0 AND client = 'web' AND stage IN ('exposed','at-risk','protected','ready') ORDER BY score").bind(since).all<{ score: number }>();
+  const scores = await env.DB.prepare("SELECT score FROM scans WHERE created_at >= ? AND cache_hit = 0 AND client = 'web' AND score IS NOT NULL ORDER BY score").bind(since).all<{ score: number }>();
   const medianScore = scores.results.length ? scores.results[Math.floor(scores.results.length / 2)].score : 0;
   const countryCount = await env.DB.prepare("SELECT COUNT(DISTINCT country) AS n FROM scans WHERE created_at >= ? AND client = 'web' AND country IS NOT NULL").bind(since).first<{ n: number }>();
-  const subscriptions = await env.DB.prepare('SELECT email, host, created_at AS createdAt FROM subscriptions ORDER BY created_at DESC LIMIT 200').all<{ email: string; host: string; createdAt: number }>();
   const ports = await env.DB.prepare("SELECT detail, COUNT(*) AS n FROM failures WHERE reason = 'Port not allowed' AND created_at >= ? GROUP BY detail ORDER BY n DESC LIMIT 5").bind(since).all<{ detail: string; n: number }>();
 
   const hosts = await env.DB.prepare(
@@ -487,32 +426,27 @@ async function metricsRoute(request: Request, env: Env): Promise<Response> {
   const failMap = new Map(failuresByDay.results.map((r) => [r.day, r.n]));
   const sorted = timings.results.map((t) => t.ms);
   const pct = (p: number) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))] : 0);
-  const totals = days.results.reduce((t, d) => ({ scans: t.scans + d.scans, hosts: t.hosts + d.hosts, cacheHits: t.cacheHits + (d.cache_hits ?? 0), failures: t.failures + (failMap.get(d.day) ?? 0) }), { scans: 0, hosts: 0, cacheHits: 0, failures: 0 });
+  const totals = days.results.reduce(
+    (t, d) => ({ scans: t.scans + d.scans, hosts: t.hosts + d.hosts, cacheHits: t.cacheHits + (d.cache_hits ?? 0), failures: t.failures + (failMap.get(d.day) ?? 0), validations: t.validations + (d.validations ?? 0) }),
+    { scans: 0, hosts: 0, cacheHits: 0, failures: 0, validations: 0 },
+  );
   for (const [day, n] of failMap) if (!days.results.some((d) => d.day === day)) totals.failures += n;
 
   return json({
     generatedAt: new Date(now).toISOString(),
-    totals: { ...totals, sharedOpens: opens?.n ?? 0, pdfDownloads: downloads?.n ?? 0, medianScore, countries: countryCount?.n ?? 0, subscriptions: subscriptions.results.length },
+    totals: { ...totals, sharedOpens: opens?.n ?? 0, pdfDownloads: downloads?.n ?? 0, medianScore, countries: countryCount?.n ?? 0 },
     days: days.results.map((d) => ({
       date: d.day,
       scans: d.scans,
       hosts: d.hosts,
-      stages: { exposed: d.exposed, 'at-risk': d.at_risk, protected: d.protected, ready: d.ready },
+      stages: { 'no-patch': d.no_patch, exposed: d.exposed, hidden: d.hidden, 'not-affected': d.not_affected, protected: d.protected, 'not-php': d.not_php, unreachable: d.odd },
       failures: failMap.get(d.day) ?? 0,
+      validations: d.validations ?? 0,
       p50: 0,
       p95: 0,
     })),
     failures: failures.results,
     hosts: hosts.results.map((h) => ({ ...h, lastAt: new Date(h.lastAt).toISOString() })),
-    subscriptions: subscriptions.results.map((r) => ({ email: r.email, host: r.host, createdAt: new Date(r.createdAt).toISOString() })),
-    studies: studies.results.map((st) => ({
-      study: st.study,
-      scans: st.scans,
-      hosts: st.hosts,
-      firstAt: new Date(st.firstAt).toISOString(),
-      lastAt: new Date(st.lastAt).toISOString(),
-      stages: { exposed: st.exposed, 'at-risk': st.at_risk, protected: st.protected, ready: st.ready, other: st.odd },
-    })),
     referrers: referrers.results,
     countries: countries.results,
     signals: [
@@ -522,17 +456,4 @@ async function metricsRoute(request: Request, env: Env): Promise<Response> {
     p50: pct(50),
     p95: pct(95),
   });
-}
-
-async function subscribeRoute(request: Request, env: Env): Promise<Response> {
-  let body: { email?: unknown; host?: unknown };
-  try {
-    body = (await request.json()) as typeof body;
-  } catch {
-    return json({ error: 'The request body must be JSON.' }, 400);
-  }
-  if (typeof body.email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.email) || body.email.length > 254) return json({ error: 'A valid email is required.' }, 400);
-  if (typeof body.host !== 'string' || body.host.length > 260) return json({ error: 'host is required' }, 400);
-  await env.DB.prepare('INSERT INTO subscriptions (email, host, created_at) VALUES (?, ?, ?)').bind(body.email.toLowerCase(), body.host, Date.now()).run();
-  return json({ ok: true });
 }

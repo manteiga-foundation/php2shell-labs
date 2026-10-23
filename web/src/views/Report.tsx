@@ -1,8 +1,6 @@
 import { Animator, Animated } from '@arwes/react';
 import { useEffect, useState } from 'react';
 import type { Assessment, Findings, NextStepId, NoteId } from '../../../engine/assess';
-import { GROUP_NAMES, type GroupName } from '../../../engine/hello';
-import { subscribe } from '../api';
 import { Panel } from '../components/Panel';
 import { Ring, stageColor } from '../components/Ring';
 import type { Messages } from '../i18n/en';
@@ -10,20 +8,9 @@ import { HTML_LANG, localePath } from '../i18n/locales';
 import { errorText, useI18n } from '../i18n/react';
 import type { ReportState } from '../report-model';
 
-const GOOD = new Set(['protected', 'ready']);
-
-const GROUP_KIND: Record<GroupName, keyof Messages['report']['probes']> = {
-  X25519MLKEM768: 'pqStandard',
-  SecP256r1MLKEM768: 'pqStandard',
-  SecP384r1MLKEM1024: 'pqStandard',
-  X25519Kyber768Draft00: 'pqDraft',
-  x25519: 'ecc',
-  secp256r1: 'ecc',
-  secp384r1: 'ecc',
-  secp521r1: 'ecc',
-  ffdhe2048: 'ff',
-  ffdhe3072: 'ff',
-};
+const SAFE = new Set(['protected', 'not-affected']);
+const EXPOSED = new Set(['exposed', 'no-patch']);
+const PROBE_IDS = ['home', 'egg', 'validation'] as const;
 
 function yesNo(v: boolean | null, yes: string, no: string, unknown: string): string {
   return v === null ? unknown : v ? yes : no;
@@ -39,7 +26,7 @@ export function Report({ state, shared, onAnother }: { state: ReportState; share
   const r = t.report;
   const { assessment: a, findings: f } = state;
   const live = state.status === 'scanning';
-  const good = GOOD.has(a.stage);
+  const safe = SAFE.has(a.stage);
   const settled = state.status === 'done' || state.status === 'error';
   const [dialog, setDialog] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -62,13 +49,16 @@ export function Report({ state, shared, onAnother }: { state: ReportState; share
     ? r.headingTesting
     : state.status === 'error'
       ? r.headingNotRun
-      : good
-        ? r.headingReady
-        : a.stage === 'unreachable'
-          ? r.headingUnreachable
-          : a.stage === 'inconclusive'
-            ? r.headingInconclusive
-            : r.headingNotReady;
+      : safe
+        ? r.headingSafe
+        : EXPOSED.has(a.stage)
+          ? r.headingExposed
+          : a.stage === 'hidden'
+            ? r.headingHidden
+            : a.stage === 'not-php'
+              ? r.headingNotPhp
+              : r.headingUnreachable;
+  const mark = safe ? '✓' : live ? '…' : a.stage === 'not-php' || a.stage === 'unreachable' ? '·' : '!';
 
   return (
     <Animator combine manager="stagger">
@@ -76,12 +66,14 @@ export function Report({ state, shared, onAnother }: { state: ReportState; share
         <aside className="aside">
           <Ring stage={a.stage} score={a.score} live={live} />
           <div className="target-line">
-            {state.host}
-            {state.port && state.port !== 443 ? `:${state.port}` : ''}
-            {state.address ? ` · ${state.address}` : ''}
+            <span className="nowrap">
+              {state.host}
+              {state.port && state.port !== 443 ? `:${state.port}` : ''}
+            </span>
+            {state.address ? <span className="nowrap"> · {state.address}</span> : ''}
           </div>
           <div className={`status-line ${live ? 'live' : ''}`}>
-            {live ? r.probesLive(state.probes.length) : state.status === 'error' ? r.stopped : state.ms !== null ? r.probesDone(state.probes.length || 14, state.ms) : r.complete}
+            {live ? r.probesLive(state.probes.length) : state.status === 'error' ? r.stopped : state.ms !== null ? r.probesDone(state.probes.length || 2, state.ms) : r.complete}
           </div>
         </aside>
 
@@ -89,7 +81,7 @@ export function Report({ state, shared, onAnother }: { state: ReportState; share
           <Animator>
             <Animated as="section" className="summary" data-testid="summary" animated={['fade', ['y', 10, 0]]}>
               <h1>
-                <span className="mark" aria-hidden="true" data-mark={good ? '✓' : live ? '…' : '!'} />
+                <span className="mark" aria-hidden="true" data-mark={mark} />
                 {heading}
               </h1>
               {state.status === 'error' ? (
@@ -103,7 +95,7 @@ export function Report({ state, shared, onAnother }: { state: ReportState; share
               )}
               {settled && state.status !== 'error' && (
                 <div className="next" data-testid="next-step">
-                  <div className="label">{a.stage === 'ready' ? r.standing : r.nextStep}</div>
+                  <div className="label">{a.stage === 'protected' ? r.standing : r.nextStep}</div>
                   <p className="title">{step.title}</p>
                   <p>{step.detail}</p>
                 </div>
@@ -145,13 +137,13 @@ export function Report({ state, shared, onAnother }: { state: ReportState; share
                   </li>
                   {a.notes.map((n) => (
                     <li key={n.id}>
-                      <span>{r.notes[n.id as NoteId]?.(f.trustError ?? r.unknownReason) ?? n.text}</span>
+                      <span>{r.notes[n.id as NoteId]?.(f.validation?.signature ?? '') ?? n.text}</span>
                     </li>
                   ))}
-                  {a.stage !== 'unreachable' && a.stage !== 'inconclusive' && (
+                  {!f.validation && (a.stage === 'hidden' || EXPOSED.has(a.stage)) && (
                     <li>
-                      <strong>{r.authTitle}</strong>
-                      <span>{a.certificate.quantumSafe ? r.authPq : r.authClassical}</span>
+                      <strong>{r.consentTitle}</strong>
+                      <span>{r.consentBody}</span>
                     </li>
                   )}
                 </ol>
@@ -160,98 +152,104 @@ export function Report({ state, shared, onAnother }: { state: ReportState; share
               <section className="section">
                 <h2>{r.technical}</h2>
                 <div className="cards">
-                  <KeyExchangeCard a={a} f={f} />
-                  <CertificateCard a={a} f={f} />
+                  <VersionCard a={a} f={f} />
+                  <ValidationCard a={a} f={f} />
                   <FoundationsCard a={a} />
                 </div>
                 <details className="tech">
                   <summary>{r.detailsSummary}</summary>
                   <ProbeTable state={state} />
-                  <ChainTable f={f} />
                   <Rubric a={a} />
                 </details>
               </section>
             </>
           )}
         </div>
-        {dialog && <DownloadDialog host={state.host ?? ''} pdfUrl={state.shareId ? `/api/report/${state.shareId}.pdf` : null} onClose={() => setDialog(false)} />}
+        {dialog && <DownloadDialog pdfUrl={state.shareId ? `/api/report/${state.shareId}.pdf` : null} onClose={() => setDialog(false)} />}
         <div className="print-footer">
-          Quantum Ready Labs · quantumreadylabs.com · {state.host} · {state.startedAt ? new Date(state.startedAt).toLocaleString(HTML_LANG[locale], { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }) + ' UTC' : ''} · {r.printFooter}
+          PHP2Shell Labs · {state.host} · {state.startedAt ? new Date(state.startedAt).toLocaleString(HTML_LANG[locale], { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }) + ' UTC' : ''} · {r.printFooter}
         </div>
       </main>
     </Animator>
   );
 }
 
-function KeyExchangeCard({ a, f }: { a: Assessment; f: Findings }) {
+function VersionCard({ a, f }: { a: Assessment; f: Findings }) {
   const { t } = useI18n();
   const r = t.report;
-  const k = a.keyExchange;
-  const color = k.status === 'hybrid' ? 'var(--stage-protected)' : k.status === 'classical' ? 'var(--stage-at-risk)' : 'var(--stage-exposed)';
+  const v = a.version;
+  const w = r.version;
+  const color =
+    v.status === 'patched' || v.status === 'below-range'
+      ? 'var(--stage-protected)'
+      : v.status === 'hidden'
+        ? 'var(--stage-hidden)'
+        : v.status === 'vulnerable' || v.status === 'no-patch'
+          ? 'var(--stage-exposed)'
+          : 'var(--text)';
+  const stateWord =
+    v.status === 'patched' ? w.patched : v.status === 'vulnerable' ? w.vulnerable : v.status === 'no-patch' ? w.noPatch : v.status === 'below-range' ? w.belowRange : v.status === 'hidden' ? w.hidden : v.status === 'absent' ? w.absent : w.unknown;
   return (
-    <Panel testId="key-exchange-card">
-      <h3>{r.kx.title}</h3>
+    <Panel testId="version-card">
+      <h3>{w.title}</h3>
       <div className="state" style={{ ['--state-color' as string]: color }}>
-        {k.status === 'hybrid' ? r.kx.hybrid : k.status === 'classical' ? r.kx.classical : k.status === 'legacy' ? r.kx.legacy : r.kx.noAnswer}
+        {stateWord}
       </div>
-      <p>{r.kx.body}</p>
+      <p>{w.body}</p>
       <ul>
         <li>
-          {r.kx.hybridGroups}{r.sep}{k.hybridGroups.length ? k.hybridGroups.join(', ') : r.none}
+          {w.php}{r.sep}{v.text ? `PHP ${v.text}` : v.status === 'hidden' ? w.hiddenValue : r.none}
         </li>
+        {v.branch && (
+          <li>
+            {w.branch}{r.sep}{v.branch} ({v.eol ? w.eol : w.supported})
+          </li>
+        )}
+        {v.fixedRelease && (
+          <li>
+            {w.fixedIn}{r.sep}{v.fixedRelease}
+          </li>
+        )}
+        {f.serverSoftware && (
+          <li>
+            {w.server}{r.sep}{f.serverSoftware}
+          </li>
+        )}
         <li>
-          {r.kx.classicalGroups}{r.sep}{k.classicalGroups.length ? k.classicalGroups.join(', ') : r.none}
+          {w.egg}{r.sep}{f.egg === 'yes' ? w.answered : f.egg === 'no' ? w.silent : r.notMeasured}
         </li>
-        <li>
-          {r.kx.preferred}{r.sep}{k.preferred ?? r.notMeasured}
-        </li>
-        <li>
-          {r.kx.tls13}{r.sep}{yesNo(k.tls13, r.kx.available, r.kx.notAvailable, r.notMeasured)}
-        </li>
-        <li>
-          {r.kx.rsaTransport}{r.sep}{yesNo(k.rsaKeyTransport, r.kx.stillAcceptedNoFs, r.kx.refused, r.notMeasured)}
-        </li>
-        {f.connection && <li>{r.kx.realConnection(f.connection.protocol, f.connection.cipher)}</li>}
       </ul>
     </Panel>
   );
 }
 
-function CertificateCard({ a, f }: { a: Assessment; f: Findings }) {
+function ValidationCard({ a, f }: { a: Assessment; f: Findings }) {
   const { t } = useI18n();
   const r = t.report;
-  const c = a.certificate;
+  const w = r.validation;
+  const s = a.validation.status;
+  const color = s === 'triggered' ? 'var(--stage-hidden)' : s === 'not-triggered' ? 'var(--text)' : 'var(--text-faint)';
+  const v = f.validation;
   return (
-    <Panel testId="certificate-card">
-      <h3>{r.cert.title}</h3>
-      <div className="state" style={{ ['--state-color' as string]: c.quantumSafe ? 'var(--stage-ready)' : 'var(--text)' }}>
-        {c.status === 'unknown' ? r.cert.notRead : c.quantumSafe ? r.cert.pqSigned : r.cert.classical}
+    <Panel testId="validation-card">
+      <h3>{w.title}</h3>
+      <div className="state" style={{ ['--state-color' as string]: color }}>
+        {s === 'triggered' ? w.triggered : s === 'not-triggered' ? w.notTriggered : w.notRun}
       </div>
-      <p>{c.quantumSafe ? r.cert.bodyPq : r.cert.bodyClassical}</p>
-      <ul>
-        {c.leafKey && (
+      <p>{s === 'triggered' ? w.bodyTriggered : s === 'not-triggered' ? w.bodyNotTriggered : w.bodyNotRun}</p>
+      {v && (
+        <ul>
           <li>
-            {r.cert.key}{r.sep}{c.leafKey}
+            {w.signature}{r.sep}{v.signature}
           </li>
-        )}
-        {c.leafSignature && (
           <li>
-            {r.cert.signature}{r.sep}{c.leafSignature}
+            {w.control}{r.sep}{w.answer(v.baseline.status, v.baseline.bodyBytes)}
           </li>
-        )}
-        {c.leafDaysValid !== null && (
           <li>
-            {r.cert.lifetime}{r.sep}{r.cert.days(c.leafDaysValid)}
-            {c.leafDaysRemaining !== null ? `, ${r.cert.remaining(c.leafDaysRemaining)}` : ''}
+            {w.large}{r.sep}{w.answer(v.payload.status, v.payload.bodyBytes)}, {w.sent(Math.round(v.payload.sentBytes / 1048576), (v.payload.ms / 1000).toFixed(1))}
           </li>
-        )}
-        <li>
-          {r.cert.chain}{r.sep}{r.cert.links(c.chainLength)}
-        </li>
-        <li>
-          {r.cert.trusted}{r.sep}{yesNo(c.trusted, r.yes, f.trustError ? `${r.no} (${f.trustError})` : r.no, r.notMeasured)}
-        </li>
-      </ul>
+        </ul>
+      )}
     </Panel>
   );
 }
@@ -260,7 +258,7 @@ function FoundationsCard({ a }: { a: Assessment }) {
   const { t } = useI18n();
   const r = t.report;
   const fo = a.foundations;
-  const inPlace = [fo.tls13, fo.noRsaKeyTransport, fo.shortLivedCertificate, fo.prefersHybrid, fo.trustedChain].filter((v) => v === true).length;
+  const inPlace = [fo.reachable, fo.phpPresent, fo.versionDisclosed, fo.supportedBranch].filter((v) => v === true).length;
   return (
     <Panel testId="foundations-card">
       <h3>{r.foundations.title}</h3>
@@ -268,19 +266,16 @@ function FoundationsCard({ a }: { a: Assessment }) {
       <p>{r.foundations.body}</p>
       <ul>
         <li>
-          {r.foundations.tls13}{r.sep}{yesNo(fo.tls13, r.yes, r.no, r.notMeasured)}
+          {r.foundations.reachable}{r.sep}{yesNo(fo.reachable, r.yes, r.no, r.notMeasured)}
         </li>
         <li>
-          {r.foundations.noRsa}{r.sep}{yesNo(fo.noRsaKeyTransport, r.yes, r.foundations.noRsaNo, r.notMeasured)}
+          {r.foundations.phpPresent}{r.sep}{yesNo(fo.phpPresent, r.yes, r.no, r.notMeasured)}
         </li>
         <li>
-          {r.foundations.shortLived}{r.sep}{yesNo(fo.shortLivedCertificate, r.yes, r.no, r.notMeasured)}
+          {r.foundations.versionDisclosed}{r.sep}{yesNo(fo.versionDisclosed, r.yes, r.no, r.notMeasured)}
         </li>
         <li>
-          {r.foundations.prefersHybrid}{r.sep}{yesNo(fo.prefersHybrid, r.yes, r.no, r.notMeasured)}
-        </li>
-        <li>
-          {r.foundations.chainTrusted}{r.sep}{yesNo(fo.trustedChain, r.yes, r.no, r.notMeasured)}
+          {r.foundations.supportedBranch}{r.sep}{yesNo(fo.supportedBranch, r.yes, r.no, r.notMeasured)}
         </li>
       </ul>
     </Panel>
@@ -290,7 +285,10 @@ function FoundationsCard({ a }: { a: Assessment }) {
 function ProbeTable({ state }: { state: ReportState }) {
   const { t } = useI18n();
   const p = t.report.probes;
-  const rows = [...state.probes].sort((x, y) => x.id.localeCompare(y.id));
+  const rows = PROBE_IDS.map((id) => state.probes.find((row) => row.id === id) ?? null);
+  const answerWord = (id: string, answer: 'yes' | 'no' | 'error') =>
+    answer === 'error' ? p.noAnswer : id === 'validation' ? (answer === 'yes' ? p.reproduced : p.notReproduced) : id === 'egg' ? (answer === 'yes' ? p.answered : p.noImage) : p.answered;
+  const answerClass = (id: string, answer: 'yes' | 'no' | 'error') => (id === 'validation' && answer === 'yes' ? 'warn' : answer);
   return (
     <div className="table-wrap">
       <table className="table">
@@ -303,71 +301,29 @@ function ProbeTable({ state }: { state: ReportState }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.id} data-testid="probe-row">
-              <td>
-                {row.label}
-                {row.id.startsWith('group:') && <div className="dim">{p[GROUP_KIND[row.id.slice(6) as GroupName]]}</div>}
-              </td>
-              <td className={`answer answer-${row.id === 'rsa-transport' && row.answer !== 'error' ? (row.answer === 'yes' ? 'warn' : 'yes') : row.answer}`}>
-                {row.id === 'rsa-transport'
-                  ? row.answer === 'yes'
-                    ? p.stillAccepted
-                    : row.answer === 'no'
-                      ? p.refused
-                      : p.noAnswer
-                  : row.answer === 'yes'
-                    ? p.supported
-                    : row.answer === 'no'
-                      ? p.notSupported
-                      : p.noAnswer}
-              </td>
-              <td className="dim">{row.detail}</td>
-              <td className="dim">{row.ms}</td>
-            </tr>
-          ))}
-          {GROUP_NAMES.filter((g) => !state.probes.some((row) => row.id === `group:${g}`)).map((g) => (
-            <tr key={g} className="dim">
-              <td>{g}</td>
-              <td className="answer">{p.waiting}</td>
-              <td />
-              <td />
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function ChainTable({ f }: { f: Findings }) {
-  const { t } = useI18n();
-  const c = t.report.chain;
-  if (!f.chain.length) return <p className="probe-meta">{c.none}</p>;
-  return (
-    <div className="table-wrap">
-      <table className="table">
-        <thead>
-          <tr>
-            <th>{c.link}</th>
-            <th>{c.subject}</th>
-            <th>{c.issuer}</th>
-            <th>{c.key}</th>
-            <th>{c.signature}</th>
-            <th>{c.validUntil}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {f.chain.map((l, i) => (
-            <tr key={i} data-testid="chain-link">
-              <td className="dim">{i === 0 ? c.leaf : l.selfSigned ? c.root : c.intermediate}</td>
-              <td className="mono">{l.subject}</td>
-              <td className="mono dim">{l.issuer}</td>
-              <td>{l.keyDetail}</td>
-              <td>{l.signatureAlgorithm}</td>
-              <td className="dim">{l.notAfter.slice(0, 10)}</td>
-            </tr>
-          ))}
+          {PROBE_IDS.map((id, i) => {
+            const row = rows[i];
+            if (!row) {
+              // The validation row is absent by design when there was no consent; the others are waiting.
+              if (id === 'validation' && !state.validate) return null;
+              return (
+                <tr key={id} className="dim">
+                  <td>{p[id]}</td>
+                  <td className="answer">{p.waiting}</td>
+                  <td />
+                  <td />
+                </tr>
+              );
+            }
+            return (
+              <tr key={id} data-testid="probe-row">
+                <td>{p[id]}</td>
+                <td className={`answer answer-${answerClass(id, row.answer)}`}>{answerWord(id, row.answer)}</td>
+                <td className="dim">{row.detail}</td>
+                <td className="dim">{row.ms}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -377,25 +333,20 @@ function ChainTable({ f }: { f: Findings }) {
 function Rubric({ a }: { a: Assessment }) {
   const { t } = useI18n();
   const r = t.report;
-  const p = a.points;
   return (
     <>
+      <p className="probe-meta">{r.rubric(a.score === null ? r.ringNoScore : `${a.score} ${r.ringOf}`, t.stage.label[a.stage])}</p>
       <p className="probe-meta">
-        {r.rubric(a.score, p.keyExchange, p.noRsaKeyTransport + p.shortLivedCertificate + p.prefersHybrid + p.trustedChain, p.noRsaKeyTransport, p.shortLivedCertificate, p.prefersHybrid, p.trustedChain, p.certificate)}
-      </p>
-      <p className="probe-meta">
-        {r.stages}{r.sep}{(['exposed', 'at-risk', 'protected', 'ready'] as const).map((s) => `${t.stage.label[s]}${r.sep}${t.stage.meaning[s]}`).join(' ')}
+        {r.stages}{r.sep}{(['no-patch', 'exposed', 'hidden', 'not-affected', 'protected'] as const).map((s) => `${t.stage.label[s]}${r.sep}${t.stage.meaning[s]}`).join(' ')}
       </p>
       <p className="probe-meta">{r.standards}</p>
     </>
   );
 }
 
-function DownloadDialog({ host, pdfUrl, onClose }: { host: string; pdfUrl: string | null; onClose: () => void }) {
+function DownloadDialog({ pdfUrl, onClose }: { pdfUrl: string | null; onClose: () => void }) {
   const { t } = useI18n();
   const d = t.dialog;
-  const [email, setEmail] = useState('');
-  const [busy, setBusy] = useState(false);
   const pdf = usePreparedPdf(pdfUrl);
   const download = () => {
     if (pdfUrl) {
@@ -412,21 +363,12 @@ function DownloadDialog({ host, pdfUrl, onClose }: { host: string; pdfUrl: strin
       setTimeout(() => window.print(), 50);
     }
   };
-  const withEmail = async () => {
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
-    setBusy(true);
-    await subscribe(email, host).catch(() => false);
-    setBusy(false);
-    download();
-  };
   const notReady = pdfUrl !== null && pdf.status !== 'ready';
   return (
     <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="dl-title">
       <div className="dialog">
         <h2 id="dl-title">{d.title}</h2>
-        <p>
-          {pdfUrl ? d.bodyPdf : d.bodyPrint} {d.subscribe(host)}
-        </p>
+        <p>{pdfUrl ? d.bodyPdf : d.bodyPrint}</p>
         {pdfUrl && (
           <div className={`pdf-progress pdf-${pdf.status}`} data-testid="pdf-progress" role="status" aria-live="polite">
             <div className="pdf-bar" aria-hidden="true">
@@ -439,15 +381,8 @@ function DownloadDialog({ host, pdfUrl, onClose }: { host: string; pdfUrl: strin
             </span>
           </div>
         )}
-        <label htmlFor="email" className="sr-only">
-          {d.email}
-        </label>
-        <input id="email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
         <div className="actions">
-          <button type="button" className="button" onClick={withEmail} disabled={busy || !email || notReady}>
-            {d.downloadSubscribe}
-          </button>
-          <button type="button" className="button ghost" onClick={download} data-testid="download-only" disabled={notReady}>
+          <button type="button" className="button" onClick={download} data-testid="download-only" disabled={notReady}>
             {pdfUrl ? (pdf.status === 'preparing' ? d.preparingButton : d.downloadPdf) : d.print}
           </button>
           <button type="button" className="button ghost" onClick={onClose}>
@@ -476,7 +411,7 @@ function usePreparedPdf(pdfUrl: string | null): PreparedPdf {
         const blob = await res.blob();
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
-        const filename = res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1] ?? 'quantum-readiness.pdf';
+        const filename = res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1] ?? 'php2shell-exposure.pdf';
         setState({ status: 'ready', objectUrl, filename, bytes: blob.size });
       } catch {
         if (!cancelled) setState({ status: 'error' });

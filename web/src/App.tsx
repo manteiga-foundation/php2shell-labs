@@ -1,25 +1,18 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { loadResult, startScan, type ScanHandle } from './api';
 import { applyEvent, initialReport, reportFromResult, type ReportState, type StreamEvent } from './report-model';
-import { FaBalanceScale, FaChartBar, FaGithub, FaPlug } from 'react-icons/fa';
+import { FaBalanceScale, FaGithub, FaPlug } from 'react-icons/fa';
 import { Api } from './views/Api';
 import { Entry } from './views/Entry';
 import { Metrics } from './views/Metrics';
 import { Report } from './views/Report';
-import { Study, StudyIndex } from './views/Study';
-import { STUDY_META, studyText } from './study-model';
 import { HTML_LANG, LOCALE_NAME, LOCALES, localePath, splitPath, STORAGE_KEY, type Locale } from './i18n/locales';
 import { MESSAGES } from './i18n/messages';
 import { I18nProvider, Rich } from './i18n/react';
 
-type Route =
-  | { view: 'entry' }
-  | { view: 'scan'; host: string }
-  | { view: 'shared'; id: string }
-  | { view: 'metrics' }
-  | { view: 'api' }
-  | { view: 'studies' }
-  | { view: 'study'; slug: string };
+export const REPO_URL = 'https://github.com/manteiga-foundation/php2shell-labs';
+
+type Route = { view: 'entry' } | { view: 'scan'; host: string; validate: boolean } | { view: 'shared'; id: string } | { view: 'metrics' } | { view: 'api' };
 
 /** The view, read from the path without its language prefix. */
 function routeFromLocation(): Route {
@@ -27,13 +20,11 @@ function routeFromLocation(): Route {
   const pathname = splitPath(window.location.pathname).rest;
   if (pathname === '/metrics') return { view: 'metrics' };
   if (pathname === '/api') return { view: 'api' };
-  if (pathname === '/studies' || pathname === '/studies/') return { view: 'studies' };
-  const study = pathname.match(/^\/studies\/([a-z0-9-]+)$/);
-  if (study) return { view: 'study', slug: study[1] };
   const shared = pathname.match(/^\/r\/([A-Za-z0-9_-]+)$/);
   if (shared) return { view: 'shared', id: shared[1] };
-  const host = new URLSearchParams(search).get('host');
-  if (pathname === '/scan' && host) return { view: 'scan', host };
+  const params = new URLSearchParams(search);
+  const host = params.get('host');
+  if (pathname === '/scan' && host) return { view: 'scan', host, validate: params.get('validate') === '1' };
   return { view: 'entry' };
 }
 
@@ -76,7 +67,7 @@ export function App() {
     handle.current = null;
     if (route.view === 'scan') {
       dispatch({ type: 'reset' });
-      handle.current = startScan(route.host, (e) => dispatch(e), () => {});
+      handle.current = startScan(route.host, route.validate, (e) => dispatch(e), () => {});
     } else if (route.view === 'shared') {
       dispatch({ type: 'reset' });
       loadResult(route.id).then((r) => {
@@ -88,7 +79,7 @@ export function App() {
   }, [routeKey]);
 
   useEffect(() => {
-    if (import.meta.env.DEV) (window as unknown as { __qrl: () => ReportState }).__qrl = () => report;
+    if (import.meta.env.DEV) (window as unknown as { __p2s: () => ReportState }).__p2s = () => report;
   }, [report]);
 
   useEffect(() => {
@@ -117,12 +108,10 @@ export function App() {
   useEffect(() => {
     const host = report.host;
     const stage = report.assessment.stage;
-    const suffix = ' · Quantum Ready Labs';
+    const suffix = ' · PHP2Shell Labs';
     if (route.view === 'entry') document.title = t.meta.title;
     else if (route.view === 'metrics') document.title = t.titles.metrics + suffix;
     else if (route.view === 'api') document.title = t.titles.api + suffix;
-    else if (route.view === 'studies') document.title = t.titles.studies + suffix;
-    else if (route.view === 'study') document.title = (STUDY_META[route.slug] ? studyText(STUDY_META[route.slug], locale).title : t.titles.noStudy) + suffix;
     else if (host && report.status === 'done') document.title = t.titles.done(host, t.stage.label[stage]) + suffix;
     else if (host) document.title = t.titles.testing(host) + suffix;
   }, [route, t, report.host, report.status, report.assessment.stage]);
@@ -134,7 +123,7 @@ export function App() {
           <div className="brand-block">
             <a className="brand" href={localePath(locale, '/')} onClick={(e) => { e.preventDefault(); go('/'); }}>
               <span className="mark" aria-hidden="true" />
-              Quantum Ready Labs
+              PHP2Shell Labs
             </a>
             <a className="byline" data-testid="byline" href="https://manteiga.org" rel="noopener">
               {t.shell.byline}
@@ -142,17 +131,13 @@ export function App() {
           </div>
           <div className="topbar-end">
             <nav aria-label="Site">
-              <a href="https://github.com/manteiga-foundation/quantum-ready-labs" rel="noopener">
+              <a href={REPO_URL} rel="noopener">
                 <FaGithub aria-hidden="true" />
                 {t.shell.source}
               </a>
-              <a href="https://github.com/manteiga-foundation/quantum-ready-labs/blob/main/docs/scoring.md" rel="noopener">
+              <a href={`${REPO_URL}/blob/main/docs/scoring.md`} rel="noopener">
                 <FaBalanceScale aria-hidden="true" />
                 {t.shell.howWeScore}
-              </a>
-              <a href={localePath(locale, '/studies')} onClick={(e) => { e.preventDefault(); go('/studies'); }}>
-                <FaChartBar aria-hidden="true" />
-                {t.shell.studies}
               </a>
               <a href={localePath(locale, '/api')} onClick={(e) => { e.preventDefault(); go('/api'); }}>
                 <FaPlug aria-hidden="true" />
@@ -169,13 +154,11 @@ export function App() {
           </div>
         </header>
         <div className="content">
-          {route.view === 'entry' && <Entry onScan={(host) => go(`/scan?host=${encodeURIComponent(host)}`)} />}
+          {route.view === 'entry' && <Entry onScan={(host, validate) => go(`/scan?host=${encodeURIComponent(host)}${validate ? '&validate=1' : ''}`)} />}
           {route.view === 'scan' && <Report state={report} shared={false} onAnother={() => go('/')} />}
           {route.view === 'shared' && <Report state={report} shared onAnother={() => go('/')} />}
           {route.view === 'metrics' && <Metrics />}
           {route.view === 'api' && <Api />}
-          {route.view === 'studies' && <StudyIndex go={go} />}
-          {route.view === 'study' && <Study key={route.slug} slug={route.slug} go={go} />}
         </div>
         <footer className="footer">
           <p>{t.shell.footerScope}</p>

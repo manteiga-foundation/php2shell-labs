@@ -2,7 +2,6 @@
 // Shared with nothing DOM-bound so bun test can replay fixtures against it.
 
 import { assess, emptyFindings, type Assessment, type Findings } from '../../engine/assess';
-import { GROUP, type GroupName } from '../../engine/hello';
 import type { ScanEvent, ScanResult } from '../../engine/events';
 import type { ScanErrorParams } from './i18n/en';
 
@@ -17,8 +16,6 @@ export interface ProbeRow {
   answer: 'yes' | 'no' | 'error';
   detail: string;
   ms: number;
-  group?: string;
-  version?: string;
 }
 
 export interface ReportState {
@@ -27,6 +24,8 @@ export interface ReportState {
   port: number | null;
   address: string | null;
   startedAt: string | null;
+  /** Whether the reader consented to the validation for this scan. */
+  validate: boolean;
   findings: Findings;
   assessment: Assessment;
   probes: ProbeRow[];
@@ -46,6 +45,7 @@ export function initialReport(): ReportState {
     port: null,
     address: null,
     startedAt: null,
+    validate: false,
     findings,
     assessment: assess(findings),
     probes: [],
@@ -58,10 +58,8 @@ export function initialReport(): ReportState {
   };
 }
 
-const GROUP_CODES = Object.fromEntries((Object.keys(GROUP) as GroupName[]).map((g) => [g, GROUP[g]])) as Record<GroupName, number>;
-
 function cloneFindings(f: Findings): Findings {
-  return { ...f, groups: { ...f.groups }, chain: [...f.chain], errors: [...f.errors] };
+  return { ...f, validation: f.validation ? { ...f.validation } : null, errors: [...f.errors] };
 }
 
 export function applyEvent(state: ReportState, event: StreamEvent): ReportState {
@@ -74,30 +72,32 @@ export function applyEvent(state: ReportState, event: StreamEvent): ReportState 
         port: event.target.port,
         address: event.address,
         startedAt: event.startedAt,
+        validate: event.validate,
       };
     case 'probe': {
       const findings = cloneFindings(state.findings);
       const { id, answer } = event;
-      if (id.startsWith('group:')) {
-        const g = id.slice(6) as GroupName;
-        if (g in findings.groups) findings.groups[g] = answer;
-      } else if (id === 'tls13') {
-        findings.tls13 = answer === 'yes' ? true : answer === 'no' ? false : null;
-      } else if (id === 'tls12') {
-        findings.tls12 = answer === 'yes' ? true : answer === 'no' ? false : null;
-      } else if (id === 'rsa-transport') {
-        findings.rsaKeyTransport = answer === 'yes' ? true : answer === 'no' ? false : null;
-      } else if (id === 'modern') {
-        findings.preferredModernGroup = answer === 'yes' && event.group && event.group in GROUP_CODES ? GROUP_CODES[event.group as GroupName] : null;
-      }
+      // Probe rows are the table; the findings come from the fingerprint and validation events, except a host that never answered.
+      if (id === 'home' && answer === 'error') findings.reachable = false;
       if (answer === 'error') findings.errors.push(`${id}: ${event.detail}`);
-      const probes = [...state.probes.filter((p) => p.id !== id), { id, label: event.label, answer, detail: event.detail, ms: event.ms, group: event.group, version: event.version }];
+      const probes = [...state.probes.filter((p) => p.id !== id), { id, label: event.label, answer, detail: event.detail, ms: event.ms }];
       return { ...state, findings, probes, assessment: assess(findings) };
     }
-    case 'connection': {
+    case 'fingerprint': {
       const findings = cloneFindings(state.findings);
-      findings.connection = { protocol: event.protocol, cipher: event.cipher, alpn: event.alpn };
-      findings.trusted = event.trusted;
+      const fp = event.fingerprint;
+      findings.reachable = true;
+      findings.status = fp.status;
+      findings.serverSoftware = fp.serverSoftware;
+      findings.poweredBy = fp.poweredBy;
+      findings.version = fp.version;
+      findings.versionText = fp.versionText;
+      findings.egg = fp.egg ? 'yes' : 'no';
+      return { ...state, findings, assessment: assess(findings) };
+    }
+    case 'validation': {
+      const findings = cloneFindings(state.findings);
+      findings.validation = { ...event.validation };
       return { ...state, findings, assessment: assess(findings) };
     }
     case 'assessment':
@@ -114,6 +114,7 @@ export function applyEvent(state: ReportState, event: StreamEvent): ReportState 
         port: event.result.target.port,
         address: event.result.address,
         startedAt: event.result.startedAt,
+        validate: event.result.validate,
       };
     case 'saved':
       return { ...state, shareId: event.id };

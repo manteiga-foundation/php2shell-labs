@@ -3,9 +3,10 @@ import { useState, type FormEvent } from 'react';
 import { parseTarget, TargetError } from '../../../engine/target';
 import { errorText, Rich, useI18n } from '../i18n/react';
 
-export function Entry({ onScan }: { onScan: (host: string) => void }) {
+export function Entry({ onScan }: { onScan: (host: string, validate: boolean) => void }) {
   const { t } = useI18n();
   const [value, setValue] = useState('');
+  const [validate, setValidate] = useState(false);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
 
   const submit = (e: FormEvent) => {
@@ -13,7 +14,7 @@ export function Entry({ onScan }: { onScan: (host: string) => void }) {
     try {
       const target = parseTarget(value);
       setError(null);
-      onScan(target.port === 443 ? target.host : `${target.host.includes(':') ? `[${target.host}]` : target.host}:${target.port}`);
+      onScan(target.port === 443 ? target.host : `${target.host.includes(':') ? `[${target.host}]` : target.host}:${target.port}`, validate);
     } catch (err) {
       setError(err instanceof TargetError ? { code: err.code, message: err.message } : { code: 'unreadable', message: t.errors.target.unreadable });
     }
@@ -58,6 +59,15 @@ export function Entry({ onScan }: { onScan: (host: string) => void }) {
               </button>
             </div>
           </form>
+        </Animator>
+        <Animator>
+          <Animated as="label" className="consent" animated={['fade']} htmlFor="validate">
+            <input id="validate" name="validate" type="checkbox" checked={validate} onChange={(e) => setValidate(e.target.checked)} data-testid="consent" />
+            <span>
+              {t.entry.consent}
+              <span className="hint">{t.entry.consentHint}</span>
+            </span>
+          </Animated>
         </Animator>
         {error && (
           <p className="alert" role="alert" id="host-error">

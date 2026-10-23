@@ -7,8 +7,20 @@
         "port": 443
       },
       "address": "203.0.113.10",
-      "startedAt": "2026-10-23T22:09:24.554Z",
+      "startedAt": "2026-10-23T22:14:53.831Z",
       "validate": false
+    },
+    {
+      "type": "fingerprint",
+      "fingerprint": {
+        "status": 200,
+        "serverSoftware": "Apache/2.4.58 (Ubuntu)",
+        "poweredBy": null,
+        "versionText": null,
+        "version": null,
+        "egg": true
+      },
+      "ms": 1
     },
     {
       "type": "probe",
@@ -24,18 +36,6 @@
       "label": "PHP's credit endpoint",
       "answer": "yes",
       "detail": "answered with the PHP logo",
-      "ms": 1
-    },
-    {
-      "type": "fingerprint",
-      "fingerprint": {
-        "status": 200,
-        "serverSoftware": "Apache/2.4.58 (Ubuntu)",
-        "poweredBy": null,
-        "versionText": null,
-        "version": null,
-        "egg": true
-      },
       "ms": 1
     },
     {
@@ -83,7 +83,7 @@
       "port": 443
     },
     "address": "203.0.113.10",
-    "startedAt": "2026-10-23T22:09:24.554Z",
+    "startedAt": "2026-10-23T22:14:53.831Z",
     "ms": 1,
     "validate": false,
     "findings": {

@@ -7,8 +7,20 @@
         "port": 80
       },
       "address": "203.0.113.10",
-      "startedAt": "2026-10-23T22:09:24.556Z",
+      "startedAt": "2026-10-23T22:14:53.834Z",
       "validate": true
+    },
+    {
+      "type": "fingerprint",
+      "fingerprint": {
+        "status": 200,
+        "serverSoftware": "nginx/1.24.0",
+        "poweredBy": null,
+        "versionText": null,
+        "version": null,
+        "egg": false
+      },
+      "ms": 1
     },
     {
       "type": "probe",
@@ -24,18 +36,6 @@
       "label": "PHP's credit endpoint",
       "answer": "no",
       "detail": "no image came back",
-      "ms": 1
-    },
-    {
-      "type": "fingerprint",
-      "fingerprint": {
-        "status": 200,
-        "serverSoftware": "nginx/1.24.0",
-        "poweredBy": null,
-        "versionText": null,
-        "version": null,
-        "egg": false
-      },
       "ms": 1
     },
     {
@@ -83,7 +83,7 @@
       "port": 80
     },
     "address": "203.0.113.10",
-    "startedAt": "2026-10-23T22:09:24.556Z",
+    "startedAt": "2026-10-23T22:14:53.834Z",
     "ms": 1,
     "validate": true,
     "findings": {

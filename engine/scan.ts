@@ -49,13 +49,14 @@ export async function scan(target: Target, options: ScanOptions = {}): Promise<S
     findings.versionText = fp.versionText;
     findings.egg = fp.egg ? 'yes' : 'no';
     const said = [fp.serverSoftware, fp.poweredBy].filter(Boolean).join(', ');
-    onEvent({ type: 'probe', id: 'home', label: 'One ordinary visit', answer: 'yes', detail: `HTTP ${fp.status}${said ? `, ${said}` : ', no server header'}`, ms: since(t0) });
-    onEvent({ type: 'probe', id: 'egg', label: "PHP's credit endpoint", answer: fp.egg ? 'yes' : 'no', detail: fp.egg ? 'answered with the PHP logo' : 'no image came back', ms: since(t0) });
+    // The fingerprint goes first: it decides the stage, so the live ring never shows a word the probes then take back.
     onEvent({
       type: 'fingerprint',
       fingerprint: { status: fp.status, serverSoftware: fp.serverSoftware, poweredBy: fp.poweredBy, versionText: fp.versionText, version: fp.version, egg: fp.egg },
       ms: since(t0),
     });
+    onEvent({ type: 'probe', id: 'home', label: 'One ordinary visit', answer: 'yes', detail: `HTTP ${fp.status}${said ? `, ${said}` : ', no server header'}`, ms: since(t0) });
+    onEvent({ type: 'probe', id: 'egg', label: "PHP's credit endpoint", answer: fp.egg ? 'yes' : 'no', detail: fp.egg ? 'answered with the PHP logo' : 'no image came back', ms: since(t0) });
   }
 
   // The validation needs consent and a PHP host; nothing is sent to a host that did not answer as PHP.
@@ -68,8 +69,8 @@ export async function scan(target: Target, options: ScanOptions = {}): Promise<S
       onEvent({ type: 'probe', id: 'validation', label: 'Exploit validation', answer: 'error', detail: v.error === 'timeout' ? 'the large request timed out' : 'the host dropped the connection', ms: since(t1) });
     } else {
       findings.validation = { verdict: v.verdict, baseline: v.baseline, payload: v.payload, signature: v.signature };
-      onEvent({ type: 'probe', id: 'validation', label: 'Exploit validation', answer: v.verdict === 'triggered' ? 'yes' : 'no', detail: v.signature, ms: since(t1) });
       onEvent({ type: 'validation', validation: findings.validation });
+      onEvent({ type: 'probe', id: 'validation', label: 'Exploit validation', answer: v.verdict === 'triggered' ? 'yes' : 'no', detail: v.signature, ms: since(t1) });
     }
   }
 

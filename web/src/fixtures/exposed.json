@@ -7,24 +7,8 @@
         "port": 443
       },
       "address": "203.0.113.10",
-      "startedAt": "2026-10-23T22:09:24.552Z",
+      "startedAt": "2026-10-23T22:14:53.829Z",
       "validate": false
-    },
-    {
-      "type": "probe",
-      "id": "home",
-      "label": "One ordinary visit",
-      "answer": "yes",
-      "detail": "HTTP 200, PHP/8.2.34",
-      "ms": 1
-    },
-    {
-      "type": "probe",
-      "id": "egg",
-      "label": "PHP's credit endpoint",
-      "answer": "yes",
-      "detail": "answered with the PHP logo",
-      "ms": 1
     },
     {
       "type": "fingerprint",
@@ -40,6 +24,22 @@
         },
         "egg": true
       },
+      "ms": 1
+    },
+    {
+      "type": "probe",
+      "id": "home",
+      "label": "One ordinary visit",
+      "answer": "yes",
+      "detail": "HTTP 200, PHP/8.2.34",
+      "ms": 1
+    },
+    {
+      "type": "probe",
+      "id": "egg",
+      "label": "PHP's credit endpoint",
+      "answer": "yes",
+      "detail": "answered with the PHP logo",
       "ms": 1
     },
     {
@@ -87,7 +87,7 @@
       "port": 443
     },
     "address": "203.0.113.10",
-    "startedAt": "2026-10-23T22:09:24.552Z",
+    "startedAt": "2026-10-23T22:14:53.829Z",
     "ms": 2,
     "validate": false,
     "findings": {

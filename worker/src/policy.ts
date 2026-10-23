@@ -8,9 +8,11 @@ import { MESSAGES } from '../../web/src/i18n/messages';
 
 export const RATE_LIMITS = {
   /** Per caller (client IP): a generous burst, then a wait. */
-  caller: { max: 20, windowS: 600 },
+  caller: { max: 20, windowS: 3600 },
   /** Per target host: nobody gets to hammer a third party through us. */
-  host: { max: 6, windowS: 600 },
+  host: { max: 6, windowS: 3600 },
+  /** Per caller, consented validations: each one is a 48 MB request to someone else's server. */
+  validation: { max: 4, windowS: 3600 },
 } as const;
 
 export type RateKind = keyof typeof RATE_LIMITS;
@@ -63,7 +65,7 @@ export function previewFor(result: ScanResult, id: string, origin: string, local
   const stage = result.assessment.stage;
   const step = t.report.steps[result.assessment.nextStep.id as NextStepId] ?? result.assessment.nextStep;
   return {
-    title: `${t.meta.shareTitle(host, t.stage.label[stage])} · Quantum Ready Labs`,
+    title: `${t.meta.shareTitle(host, t.stage.label[stage])} · PHP2Shell Labs`,
     description: t.meta.shareDescription(t.report.verdict[stage], step.title),
     image: `${origin}/og/${stage}.png`,
     url: `${origin}${localePath(locale, `/r/${id}`)}`,
@@ -82,8 +84,12 @@ export function escapeAttr(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/** A study slug: lower-case, digits and dashes, 3-40 chars. Rows it owns are tagged `study:<slug>`. */
-export function studyClient(slug: unknown): string | null {
-  if (typeof slug !== 'string' || !/^[a-z0-9][a-z0-9-]{2,39}$/.test(slug)) return null;
-  return `study:${slug}`;
+/**
+ * Whether a stored scan can answer a new request: an exposure result under 24 hours old serves a
+ * new exposure request, whether or not it carried a validation; a consented validation always
+ * runs fresh.
+ */
+export function cacheServes({ requestValidate, createdAtMs, nowMs }: { requestValidate: boolean; createdAtMs: number; nowMs: number }): boolean {
+  if (requestValidate) return false;
+  return isFresh(createdAtMs, nowMs);
 }

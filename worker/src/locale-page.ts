@@ -14,9 +14,9 @@ interface RewriterElement {
   append(content: string, options?: { html?: boolean }): unknown;
 }
 
-/** The pages that exist in every language: the home page and the studies. */
+/** The pages that exist in every language: the home page. */
 function isTranslated(rest: string): boolean {
-  return rest === '/' || rest === '/studies' || /^\/studies\/[a-z0-9-]+$/.test(rest);
+  return rest === '/';
 }
 
 /** The same page in every language, then the default for everyone else. */
@@ -64,9 +64,9 @@ export function localizePage(index: Response, pathname: string, origin: string):
     .transform(index);
 }
 
-/** Every translated page in every language with its alternates, then the English-only API page. */
-export function sitemapXml(origin: string, studySlugs: string[]): string {
-  const pages = ['/', '/studies', ...studySlugs.map((s) => `/studies/${s}`)].flatMap((rest) => {
+/** The home page in every language with its alternates, then the English-only API page. */
+export function sitemapXml(origin: string): string {
+  const pages = ['/'].flatMap((rest) => {
     const links = alternates(origin, rest)
       .map((a) => `    <xhtml:link rel="alternate" hreflang="${escapeAttr(a.hreflang)}" href="${escapeAttr(a.href)}"/>`)
       .join('\n');

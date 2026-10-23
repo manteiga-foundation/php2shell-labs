@@ -77,7 +77,7 @@ describe('messages: every language says everything', () => {
       const m = MESSAGES[locale];
       expect({ locale, same: m.entry.h1 === en.entry.h1 }).toEqual({ locale, same: false });
       expect({ locale, same: m.report.verdict.protected === en.report.verdict.protected }).toEqual({ locale, same: false });
-      expect({ locale, same: m.stage.label['at-risk'] === en.stage.label['at-risk'] }).toEqual({ locale, same: false });
+      expect({ locale, same: m.stage.label['no-patch'] === en.stage.label['no-patch'] }).toEqual({ locale, same: false });
       expect({ locale, same: m.meta.description === en.meta.description }).toEqual({ locale, same: false });
     }
   });
