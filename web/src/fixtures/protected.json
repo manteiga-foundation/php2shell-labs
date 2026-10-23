@@ -1,0 +1,140 @@
+{
+  "events": [
+    {
+      "type": "start",
+      "target": {
+        "host": "protected.example",
+        "port": 443
+      },
+      "address": "203.0.113.10",
+      "startedAt": "2026-10-23T22:09:24.555Z",
+      "validate": false
+    },
+    {
+      "type": "probe",
+      "id": "home",
+      "label": "One ordinary visit",
+      "answer": "yes",
+      "detail": "HTTP 200, nginx/1.26.2, PHP/8.3.36",
+      "ms": 1
+    },
+    {
+      "type": "probe",
+      "id": "egg",
+      "label": "PHP's credit endpoint",
+      "answer": "yes",
+      "detail": "answered with the PHP logo",
+      "ms": 1
+    },
+    {
+      "type": "fingerprint",
+      "fingerprint": {
+        "status": 200,
+        "serverSoftware": "nginx/1.26.2",
+        "poweredBy": "PHP/8.3.36",
+        "versionText": "8.3.36",
+        "version": {
+          "major": 8,
+          "minor": 3,
+          "patch": 36
+        },
+        "egg": true
+      },
+      "ms": 1
+    },
+    {
+      "type": "assessment",
+      "assessment": {
+        "stage": "protected",
+        "score": 100,
+        "verdict": "This host is not exposed to PHP2Shell: its PHP is a fixed release.",
+        "nextStep": {
+          "id": "keep-current",
+          "title": "Nothing to do today",
+          "detail": "The host runs a fixed release. Keep PHP inside the fixed releases as part of normal patching, and consider hiding the version header (expose_php = Off) now that it no longer helps you."
+        },
+        "version": {
+          "status": "patched",
+          "text": "8.3.36",
+          "branch": "8.3",
+          "fixedRelease": "8.3.36",
+          "eol": false
+        },
+        "validation": {
+          "status": "not-run",
+          "signature": null
+        },
+        "foundations": {
+          "reachable": true,
+          "phpPresent": true,
+          "versionDisclosed": true,
+          "supportedBranch": true
+        },
+        "notes": [],
+        "points": {
+          "stage": 100
+        }
+      }
+    },
+    {
+      "type": "done",
+      "ms": 1
+    }
+  ],
+  "result": {
+    "target": {
+      "host": "protected.example",
+      "port": 443
+    },
+    "address": "203.0.113.10",
+    "startedAt": "2026-10-23T22:09:24.555Z",
+    "ms": 1,
+    "validate": false,
+    "findings": {
+      "reachable": true,
+      "status": 200,
+      "serverSoftware": "nginx/1.26.2",
+      "poweredBy": "PHP/8.3.36",
+      "version": {
+        "major": 8,
+        "minor": 3,
+        "patch": 36
+      },
+      "versionText": "8.3.36",
+      "egg": "yes",
+      "validation": null,
+      "errors": []
+    },
+    "assessment": {
+      "stage": "protected",
+      "score": 100,
+      "verdict": "This host is not exposed to PHP2Shell: its PHP is a fixed release.",
+      "nextStep": {
+        "id": "keep-current",
+        "title": "Nothing to do today",
+        "detail": "The host runs a fixed release. Keep PHP inside the fixed releases as part of normal patching, and consider hiding the version header (expose_php = Off) now that it no longer helps you."
+      },
+      "version": {
+        "status": "patched",
+        "text": "8.3.36",
+        "branch": "8.3",
+        "fixedRelease": "8.3.36",
+        "eol": false
+      },
+      "validation": {
+        "status": "not-run",
+        "signature": null
+      },
+      "foundations": {
+        "reachable": true,
+        "phpPresent": true,
+        "versionDisclosed": true,
+        "supportedBranch": true
+      },
+      "notes": [],
+      "points": {
+        "stage": 100
+      }
+    }
+  }
+}

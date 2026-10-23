@@ -1,0 +1,38 @@
+# Fly Machines configuration for the engine. Deploy from the repository root:
+#   fly deploy --config fly.toml --remote-only
+# Secrets (set once, never in files):  fly secrets set ENGINE_TOKEN=<random> -a php2shell-engine
+app = "php2shell-engine"
+primary_region = "iad"
+
+[build]
+  dockerfile = "engine/Dockerfile"
+
+[env]
+  PORT = "8787"
+  # Scans in flight per machine before the engine answers 429. A consented validation holds a
+  # slot for the length of one 48 MB upload, so the cap is lower than QRL's.
+  ENGINE_MAX_CONCURRENT = "16"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 10
+    hard_limit = 15
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "10s"
+  method = "GET"
+  path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

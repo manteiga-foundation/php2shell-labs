@@ -1,0 +1,140 @@
+{
+  "events": [
+    {
+      "type": "start",
+      "target": {
+        "host": "exposed.example",
+        "port": 443
+      },
+      "address": "203.0.113.10",
+      "startedAt": "2026-10-23T22:09:24.552Z",
+      "validate": false
+    },
+    {
+      "type": "probe",
+      "id": "home",
+      "label": "One ordinary visit",
+      "answer": "yes",
+      "detail": "HTTP 200, PHP/8.2.34",
+      "ms": 1
+    },
+    {
+      "type": "probe",
+      "id": "egg",
+      "label": "PHP's credit endpoint",
+      "answer": "yes",
+      "detail": "answered with the PHP logo",
+      "ms": 1
+    },
+    {
+      "type": "fingerprint",
+      "fingerprint": {
+        "status": 200,
+        "serverSoftware": null,
+        "poweredBy": "PHP/8.2.34",
+        "versionText": "8.2.34",
+        "version": {
+          "major": 8,
+          "minor": 2,
+          "patch": 34
+        },
+        "egg": true
+      },
+      "ms": 1
+    },
+    {
+      "type": "assessment",
+      "assessment": {
+        "stage": "exposed",
+        "score": 35,
+        "verdict": "This host is exposed to PHP2Shell: it runs a PHP version inside the affected range, and a fixed release exists for its branch.",
+        "nextStep": {
+          "id": "patch",
+          "title": "Install your branch's fixed PHP release",
+          "detail": "The fixed releases are 8.5.12, 8.4.27, 8.3.36 and 8.2.35. A package update and a restart of PHP is the whole change; test again afterwards and the report turns Protected."
+        },
+        "version": {
+          "status": "vulnerable",
+          "text": "8.2.34",
+          "branch": "8.2",
+          "fixedRelease": "8.2.35",
+          "eol": false
+        },
+        "validation": {
+          "status": "not-run",
+          "signature": null
+        },
+        "foundations": {
+          "reachable": true,
+          "phpPresent": true,
+          "versionDisclosed": true,
+          "supportedBranch": true
+        },
+        "notes": [],
+        "points": {
+          "stage": 35
+        }
+      }
+    },
+    {
+      "type": "done",
+      "ms": 2
+    }
+  ],
+  "result": {
+    "target": {
+      "host": "exposed.example",
+      "port": 443
+    },
+    "address": "203.0.113.10",
+    "startedAt": "2026-10-23T22:09:24.552Z",
+    "ms": 2,
+    "validate": false,
+    "findings": {
+      "reachable": true,
+      "status": 200,
+      "serverSoftware": null,
+      "poweredBy": "PHP/8.2.34",
+      "version": {
+        "major": 8,
+        "minor": 2,
+        "patch": 34
+      },
+      "versionText": "8.2.34",
+      "egg": "yes",
+      "validation": null,
+      "errors": []
+    },
+    "assessment": {
+      "stage": "exposed",
+      "score": 35,
+      "verdict": "This host is exposed to PHP2Shell: it runs a PHP version inside the affected range, and a fixed release exists for its branch.",
+      "nextStep": {
+        "id": "patch",
+        "title": "Install your branch's fixed PHP release",
+        "detail": "The fixed releases are 8.5.12, 8.4.27, 8.3.36 and 8.2.35. A package update and a restart of PHP is the whole change; test again afterwards and the report turns Protected."
+      },
+      "version": {
+        "status": "vulnerable",
+        "text": "8.2.34",
+        "branch": "8.2",
+        "fixedRelease": "8.2.35",
+        "eol": false
+      },
+      "validation": {
+        "status": "not-run",
+        "signature": null
+      },
+      "foundations": {
+        "reachable": true,
+        "phpPresent": true,
+        "versionDisclosed": true,
+        "supportedBranch": true
+      },
+      "notes": [],
+      "points": {
+        "stage": 35
+      }
+    }
+  }
+}

@@ -1,0 +1,188 @@
+{
+  "events": [
+    {
+      "type": "start",
+      "target": {
+        "host": "no-patch.example",
+        "port": 80
+      },
+      "address": "203.0.113.10",
+      "startedAt": "2026-10-23T22:09:24.543Z",
+      "validate": true
+    },
+    {
+      "type": "probe",
+      "id": "home",
+      "label": "One ordinary visit",
+      "answer": "yes",
+      "detail": "HTTP 200, PHP/7.1.26",
+      "ms": 5
+    },
+    {
+      "type": "probe",
+      "id": "egg",
+      "label": "PHP's credit endpoint",
+      "answer": "yes",
+      "detail": "answered with the PHP logo",
+      "ms": 5
+    },
+    {
+      "type": "fingerprint",
+      "fingerprint": {
+        "status": 200,
+        "serverSoftware": null,
+        "poweredBy": "PHP/7.1.26",
+        "versionText": "7.1.26",
+        "version": {
+          "major": 7,
+          "minor": 1,
+          "patch": 26
+        },
+        "egg": true
+      },
+      "ms": 5
+    },
+    {
+      "type": "probe",
+      "id": "validation",
+      "label": "Exploit validation",
+      "answer": "yes",
+      "detail": "an empty 200 where the application answered 401 with a page",
+      "ms": 3
+    },
+    {
+      "type": "validation",
+      "validation": {
+        "verdict": "triggered",
+        "baseline": {
+          "status": 401,
+          "bodyBytes": 29
+        },
+        "payload": {
+          "status": 200,
+          "bodyBytes": 0,
+          "sentBytes": 50331648,
+          "ms": 2
+        },
+        "signature": "an empty 200 where the application answered 401 with a page"
+      }
+    },
+    {
+      "type": "assessment",
+      "assessment": {
+        "stage": "no-patch",
+        "score": 15,
+        "verdict": "This host is exposed to PHP2Shell with no patch available: its PHP branch is end-of-life, so only an upgrade removes the flaw.",
+        "nextStep": {
+          "id": "upgrade",
+          "title": "Upgrade to a supported PHP branch",
+          "detail": "The branch this host runs is end-of-life and will never receive the PHP2Shell fix. Move to 8.3 or newer and take its fixed release; distributions with long-term support may backport the fix to their own packages, which the version header will not show."
+        },
+        "version": {
+          "status": "no-patch",
+          "text": "7.1.26",
+          "branch": "7.1",
+          "fixedRelease": null,
+          "eol": true
+        },
+        "validation": {
+          "status": "triggered",
+          "signature": "an empty 200 where the application answered 401 with a page"
+        },
+        "foundations": {
+          "reachable": true,
+          "phpPresent": true,
+          "versionDisclosed": true,
+          "supportedBranch": false
+        },
+        "notes": [
+          {
+            "id": "validation-reproduced",
+            "text": "The exploit validation reproduced the out-of-memory bailout on this host: an empty 200 where the application answered 401 with a page."
+          }
+        ],
+        "points": {
+          "stage": 15
+        }
+      }
+    },
+    {
+      "type": "done",
+      "ms": 9
+    }
+  ],
+  "result": {
+    "target": {
+      "host": "no-patch.example",
+      "port": 80
+    },
+    "address": "203.0.113.10",
+    "startedAt": "2026-10-23T22:09:24.543Z",
+    "ms": 9,
+    "validate": true,
+    "findings": {
+      "reachable": true,
+      "status": 200,
+      "serverSoftware": null,
+      "poweredBy": "PHP/7.1.26",
+      "version": {
+        "major": 7,
+        "minor": 1,
+        "patch": 26
+      },
+      "versionText": "7.1.26",
+      "egg": "yes",
+      "validation": {
+        "verdict": "triggered",
+        "baseline": {
+          "status": 401,
+          "bodyBytes": 29
+        },
+        "payload": {
+          "status": 200,
+          "bodyBytes": 0,
+          "sentBytes": 50331648,
+          "ms": 2
+        },
+        "signature": "an empty 200 where the application answered 401 with a page"
+      },
+      "errors": []
+    },
+    "assessment": {
+      "stage": "no-patch",
+      "score": 15,
+      "verdict": "This host is exposed to PHP2Shell with no patch available: its PHP branch is end-of-life, so only an upgrade removes the flaw.",
+      "nextStep": {
+        "id": "upgrade",
+        "title": "Upgrade to a supported PHP branch",
+        "detail": "The branch this host runs is end-of-life and will never receive the PHP2Shell fix. Move to 8.3 or newer and take its fixed release; distributions with long-term support may backport the fix to their own packages, which the version header will not show."
+      },
+      "version": {
+        "status": "no-patch",
+        "text": "7.1.26",
+        "branch": "7.1",
+        "fixedRelease": null,
+        "eol": true
+      },
+      "validation": {
+        "status": "triggered",
+        "signature": "an empty 200 where the application answered 401 with a page"
+      },
+      "foundations": {
+        "reachable": true,
+        "phpPresent": true,
+        "versionDisclosed": true,
+        "supportedBranch": false
+      },
+      "notes": [
+        {
+          "id": "validation-reproduced",
+          "text": "The exploit validation reproduced the out-of-memory bailout on this host: an empty 200 where the application answered 401 with a page."
+        }
+      ],
+      "points": {
+        "stage": 15
+      }
+    }
+  }
+}

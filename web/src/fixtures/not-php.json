@@ -1,0 +1,132 @@
+{
+  "events": [
+    {
+      "type": "start",
+      "target": {
+        "host": "not-php.example",
+        "port": 80
+      },
+      "address": "203.0.113.10",
+      "startedAt": "2026-10-23T22:09:24.556Z",
+      "validate": true
+    },
+    {
+      "type": "probe",
+      "id": "home",
+      "label": "One ordinary visit",
+      "answer": "yes",
+      "detail": "HTTP 200, nginx/1.24.0",
+      "ms": 1
+    },
+    {
+      "type": "probe",
+      "id": "egg",
+      "label": "PHP's credit endpoint",
+      "answer": "no",
+      "detail": "no image came back",
+      "ms": 1
+    },
+    {
+      "type": "fingerprint",
+      "fingerprint": {
+        "status": 200,
+        "serverSoftware": "nginx/1.24.0",
+        "poweredBy": null,
+        "versionText": null,
+        "version": null,
+        "egg": false
+      },
+      "ms": 1
+    },
+    {
+      "type": "assessment",
+      "assessment": {
+        "stage": "not-php",
+        "score": null,
+        "verdict": "This host does not appear to run PHP, so PHP2Shell does not apply to it.",
+        "nextStep": {
+          "id": "none",
+          "title": "Nothing to do for PHP2Shell",
+          "detail": "Nothing on this host answered as PHP, so the flaw does not apply. If PHP runs behind this address on another port or path, test that one."
+        },
+        "version": {
+          "status": "absent",
+          "text": null,
+          "branch": null,
+          "fixedRelease": null,
+          "eol": null
+        },
+        "validation": {
+          "status": "not-run",
+          "signature": null
+        },
+        "foundations": {
+          "reachable": true,
+          "phpPresent": false,
+          "versionDisclosed": false,
+          "supportedBranch": null
+        },
+        "notes": [],
+        "points": {
+          "stage": 0
+        }
+      }
+    },
+    {
+      "type": "done",
+      "ms": 1
+    }
+  ],
+  "result": {
+    "target": {
+      "host": "not-php.example",
+      "port": 80
+    },
+    "address": "203.0.113.10",
+    "startedAt": "2026-10-23T22:09:24.556Z",
+    "ms": 1,
+    "validate": true,
+    "findings": {
+      "reachable": true,
+      "status": 200,
+      "serverSoftware": "nginx/1.24.0",
+      "poweredBy": null,
+      "version": null,
+      "versionText": null,
+      "egg": "no",
+      "validation": null,
+      "errors": []
+    },
+    "assessment": {
+      "stage": "not-php",
+      "score": null,
+      "verdict": "This host does not appear to run PHP, so PHP2Shell does not apply to it.",
+      "nextStep": {
+        "id": "none",
+        "title": "Nothing to do for PHP2Shell",
+        "detail": "Nothing on this host answered as PHP, so the flaw does not apply. If PHP runs behind this address on another port or path, test that one."
+      },
+      "version": {
+        "status": "absent",
+        "text": null,
+        "branch": null,
+        "fixedRelease": null,
+        "eol": null
+      },
+      "validation": {
+        "status": "not-run",
+        "signature": null
+      },
+      "foundations": {
+        "reachable": true,
+        "phpPresent": false,
+        "versionDisclosed": false,
+        "supportedBranch": null
+      },
+      "notes": [],
+      "points": {
+        "stage": 0
+      }
+    }
+  }
+}

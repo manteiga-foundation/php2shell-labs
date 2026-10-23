@@ -1,0 +1,9 @@
+node_modules
+.git
+web
+worker
+tests
+spikes
+docs
+dist
+.wrangler
