@@ -16,12 +16,12 @@ const llms = await Bun.file('web/public/llms.txt').text();
 describe('the API description', () => {
   test('is OpenAPI 3 for the production origin, at the version of the package', async () => {
     expect(spec.openapi.startsWith('3.')).toBe(true);
-    expect(spec.servers[0].url).toBe('https://quantumreadylabs.com');
+    expect(spec.servers[0].url).toBe('https://php2shell-labs.taptok-test.workers.dev');
     const pkg = (await Bun.file('package.json').json()) as { version: string };
     const { ENGINE_VERSION } = await import('../engine/server');
     expect((spec as unknown as { info: { version: string } }).info.version).toBe(pkg.version);
     expect(ENGINE_VERSION).toBe(pkg.version);
-    expect(pkg.version).toMatch(/^1\.1\./);
+    expect(pkg.version).toMatch(/^0\.2\./);
   });
 
   test('names the public routes, each of which the edge serves', () => {

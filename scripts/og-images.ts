@@ -1,43 +1,29 @@
-// Link-preview images, one per stage plus the default and one per study: 1200x630, rendered
-// from a template in Chromium. `bun run scripts/og-images.ts` writes web/public/og/*.png.
+// Link-preview images, one per stage plus the default: 1200x630, rendered from a template in
+// Chromium. `bun run scripts/og-images.ts` writes web/public/og/*.png.
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
-import { parseStudyCsv, STUDY_META, summarize } from '../web/src/study-model';
 
 interface Card {
   word: string;
   colour: string;
   line: string;
   score: string;
-  /** Overrides for study cards: the ring's fill, the small caption under the number, the title. */
+  /** The title on the right, with the stage word coloured; the ring's fill and caption when they differ from the score. */
+  h1?: string;
   pct?: number;
   of?: string;
-  h1?: string;
 }
 
 const STAGES: Record<string, Card> = {
-  default: { word: 'ARE YOU QUANTUM READY?', colour: '#e0b85c', line: 'Test any public host for post-quantum readiness.', score: '' },
-  exposed: { word: 'EXPOSED', colour: '#e05a4f', line: 'TLS 1.3 is not available. Sessions can be recorded today and decrypted later.', score: '27' },
-  'at-risk': { word: 'AT RISK', colour: '#e0b85c', line: 'Safe today; recordable now and decryptable when a large quantum computer exists.', score: '49' },
-  protected: { word: 'PROTECTED', colour: '#43b48a', line: 'Hybrid post-quantum key exchange accepted. Confidentiality protected.', score: '85' },
-  ready: { word: 'READY', colour: '#8fe0c0', line: 'Protected, and the foundations for the next step are in place.', score: '95' },
-  unreachable: { word: 'UNREACHABLE', colour: '#6b7698', line: 'No TLS server answered at this address.', score: '0' },
-  inconclusive: { word: 'INCONCLUSIVE', colour: '#9aa8d8', line: 'The server answered in a way the probes could not read with confidence.', score: '' },
+  default: { word: 'IS YOUR SERVER EXPOSED?', colour: '#e0b85c', line: 'Test any public host for PHP2Shell (CVE-2026-109618, CVE-2026-109619).', score: '' },
+  'no-patch': { word: 'NO PATCH', colour: '#e05a4f', h1: 'This host has <span style="color:#e05a4f">no patch</span>', line: 'PHP 5.4 through 8.1: inside the affected range on an end-of-life branch. Only an upgrade removes the flaw.', score: '15' },
+  exposed: { word: 'EXPOSED', colour: '#e8775f', h1: 'This host is <span style="color:#e8775f">exposed</span>', line: 'Inside the affected range, and a fixed release exists for the branch.', score: '35' },
+  hidden: { word: 'HIDDEN', colour: '#e0b85c', h1: 'This host <span style="color:#e0b85c">hides</span> its PHP version', line: 'PHP runs but hides its version. Treated as exposed until known otherwise.', score: '50' },
+  'not-affected': { word: 'NOT AFFECTED', colour: '#43b48a', h1: 'This host is <span style="color:#43b48a">not affected</span>', line: 'PHP older than 5.4: the vulnerable code does not exist in it.', score: '80' },
+  protected: { word: 'PROTECTED', colour: '#8fe0c0', h1: 'This host is <span style="color:#8fe0c0">protected</span>', line: 'A fixed PHP release (8.5.12, 8.4.27, 8.3.36, 8.2.35) or newer.', score: '100' },
+  'not-php': { word: 'NOT PHP', colour: '#9aa8d8', h1: 'This host is <span style="color:#9aa8d8">not PHP</span>', line: 'Nothing on this host answered as PHP. PHP2Shell does not apply to it.', score: '' },
+  unreachable: { word: 'UNREACHABLE', colour: '#6b7698', h1: 'This host is <span style="color:#6b7698">unreachable</span>', line: 'No web server answered at this address.', score: '' },
 };
-
-// One card per study, its figures computed from results.csv, never typed.
-for (const meta of Object.values(STUDY_META)) {
-  const s = summarize(parseStudyCsv(await Bun.file(`studies/${meta.slug}/results.csv`).text()));
-  STAGES[`study-${meta.slug}`] = {
-    word: 'PROTECTED OR READY',
-    colour: '#43b48a',
-    line: meta.lead,
-    score: String(s.protectedCount),
-    pct: s.protectedShare,
-    of: `OF ${s.total}`,
-    h1: meta.title.split(':')[0],
-  };
-}
 
 function html(stage: string): string {
   const s = STAGES[stage];
@@ -65,11 +51,11 @@ function html(stage: string): string {
     <circle cx="200" cy="200" r="190" fill="none" stroke="rgba(150,170,230,.35)" stroke-width="2" stroke-dasharray="3 9"/>
     <circle cx="200" cy="200" r="150" fill="none" stroke="rgba(150,170,230,.18)" stroke-width="10"/>
     <circle cx="200" cy="200" r="150" fill="none" stroke="${s.colour}" stroke-width="16" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct / 100)}"/>
-  </svg><div class="centre">${isDefault ? `<div class="word" style="font-size:34px">QUANTUM<br>READY<br>LABS</div>` : `<div class="word">${s.word}</div>${s.score ? `<div class="num">${s.score}</div><div class="of">${s.of ?? 'OF 100'}</div>` : ''}`}</div></div>
-  <div class="text"><div class="brand"><span class="mark"></span>Quantum Ready Labs</div>
-  <h1${s.h1 ? ' style="font-size:46px"' : ''}>${s.h1 ?? (isDefault ? 'Are you quantum ready?' : `This host is <span style="color:${s.colour}">${s.word.toLowerCase()}</span>`)}</h1>
-  <p${s.h1 ? ' style="font-size:24px"' : ''}>${s.line}</p></div>
-  <div class="url">quantumreadylabs.com</div>
+  </svg><div class="centre">${isDefault ? `<div class="word" style="font-size:34px">PHP2SHELL<br>LABS</div>` : `<div class="word">${s.word}</div>${s.score ? `<div class="num">${s.score}</div><div class="of">${s.of ?? 'OF 100'}</div>` : ''}`}</div></div>
+  <div class="text"><div class="brand"><span class="mark"></span>PHP2Shell Labs</div>
+  <h1>${s.h1 ?? (isDefault ? 'Is your server exposed to PHP2Shell?' : `This host is <span style="color:${s.colour}">${s.word.toLowerCase()}</span>`)}</h1>
+  <p>${s.line}</p></div>
+  <div class="url">php2shell labs · manteiga.org</div>
   </body></html>`;
 }
 
