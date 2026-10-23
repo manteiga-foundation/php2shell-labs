@@ -216,7 +216,8 @@ function VersionCard({ a, f }: { a: Assessment; f: Findings }) {
           </li>
         )}
         <li>
-          {w.egg}{r.sep}{f.egg === 'yes' ? w.answered : f.egg === 'no' ? w.silent : r.notMeasured}
+          {w.egg}{r.sep}
+          {f.egg === 'yes' ? w.signs.logo : f.signs.length ? f.signs.map((s) => w.signs[s]).join(', ') : f.egg === 'no' ? w.signs.none : r.notMeasured}
         </li>
       </ul>
     </Panel>

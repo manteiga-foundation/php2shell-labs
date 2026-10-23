@@ -1,9 +1,9 @@
-// A scan: resolve, read what the host says of itself (one visit plus PHP's credit query), with
+// A scan: resolve, read what the host says of itself (one visit plus PHP's logo query), with
 // consent reproduce the out-of-memory condition once, assess. Findings stream out as events so a
 // report can build live.
 
 import { assess, emptyFindings } from './assess';
-import { fingerprint } from './fingerprint';
+import { fingerprint, type PhpSign } from './fingerprint';
 import { resolveTarget } from './resolve';
 import type { Target } from './target';
 import { validate as runValidation } from './trigger';
@@ -48,19 +48,27 @@ export async function scan(target: Target, options: ScanOptions = {}): Promise<S
     findings.version = fp.version;
     findings.versionText = fp.versionText;
     findings.egg = fp.egg ? 'yes' : 'no';
+    findings.signs = fp.signs;
     const said = [fp.serverSoftware, fp.poweredBy].filter(Boolean).join(', ');
     // The fingerprint goes first: it decides the stage, so the live ring never shows a word the probes then take back.
     onEvent({
       type: 'fingerprint',
-      fingerprint: { status: fp.status, serverSoftware: fp.serverSoftware, poweredBy: fp.poweredBy, versionText: fp.versionText, version: fp.version, egg: fp.egg },
+      fingerprint: { status: fp.status, serverSoftware: fp.serverSoftware, poweredBy: fp.poweredBy, versionText: fp.versionText, version: fp.version, egg: fp.egg, signs: fp.signs },
       ms: since(t0),
     });
     onEvent({ type: 'probe', id: 'home', label: 'One ordinary visit', answer: 'yes', detail: `HTTP ${fp.status}${said ? `, ${said}` : ', no server header'}`, ms: since(t0) });
-    onEvent({ type: 'probe', id: 'egg', label: "PHP's credit endpoint", answer: fp.egg ? 'yes' : 'no', detail: fp.egg ? 'answered with the PHP logo' : 'no image came back', ms: since(t0) });
+    onEvent({
+      type: 'probe',
+      id: 'egg',
+      label: 'Signs of PHP',
+      answer: fp.egg || fp.signs.length > 0 ? 'yes' : 'no',
+      detail: fp.egg ? 'the logo query answered with the PHP image' : fp.signs.length ? signsText(fp.signs) : 'no session cookie, no .php links, no logo',
+      ms: since(t0),
+    });
   }
 
   // The validation needs consent and a PHP host; nothing is sent to a host that did not answer as PHP.
-  const phpPresent = fp.ok && (fp.version !== null || fp.egg || (fp.poweredBy !== null && /php/i.test(fp.poweredBy)));
+  const phpPresent = fp.ok && (fp.version !== null || fp.egg || fp.signs.length > 0 || (fp.poweredBy !== null && /php/i.test(fp.poweredBy)));
   if (validate && phpPresent) {
     const t1 = performance.now();
     const v = await runValidation(target.host, target.port, tls, { address: resolved.address, baselineBytes: options.baselineBytes, payloadBytes: options.payloadBytes });
@@ -79,4 +87,10 @@ export async function scan(target: Target, options: ScanOptions = {}): Promise<S
   const ms = since(started);
   onEvent({ type: 'done', ms });
   return { target, address: resolved.address, startedAt, ms, validate, findings, assessment };
+}
+
+/** The signs in words, for the probe row. */
+function signsText(signs: PhpSign[]): string {
+  const words: Record<PhpSign, string> = { cookie: 'a PHPSESSID cookie', links: '.php links on the page', logo: 'the PHP logo' };
+  return signs.map((s) => words[s]).join(', ');
 }

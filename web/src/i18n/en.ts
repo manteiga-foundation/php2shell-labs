@@ -82,7 +82,7 @@ export const en = {
       },
       {
         q: 'What does the exposure test do to my host?',
-        a: "One ordinary visit, as a browser would make it, plus PHP's built-in credit query: two requests from one address, in about a second. It reads what every visitor can already see (the Server and X-Powered-By headers) and compares the PHP version against the fixed releases. No payload is sent, and nothing is stored about the host except the result you see.",
+        a: "One ordinary visit, as a browser would make it, plus PHP's old logo query: two requests from one address, in about a second. It reads what every visitor can already see (the Server and X-Powered-By headers, a PHP session cookie, links to .php pages) and compares the PHP version against the fixed releases. No payload is sent, and nothing is stored about the host except the result you see.",
       },
       {
         q: 'What does the exploit validation do, and why is it off by default?',
@@ -170,9 +170,10 @@ export const en = {
       supported: 'supported',
       fixedIn: 'Fixed in',
       server: 'Server',
-      egg: 'PHP credit endpoint',
+      egg: 'Signs of PHP',
       answered: 'answered',
       silent: 'silent',
+      signs: { cookie: 'a PHPSESSID cookie', links: 'links to .php pages', logo: 'the PHP logo', none: 'none seen' },
     },
     validation: {
       title: 'Validation · evidence',
@@ -206,10 +207,10 @@ export const en = {
       noAnswer: 'no answer',
       reproduced: 'reproduced',
       notReproduced: 'not reproduced',
-      noImage: 'no image',
+      noImage: 'none seen',
       waiting: 'waiting',
       home: 'One ordinary visit',
-      egg: "PHP's credit endpoint",
+      egg: 'Signs of PHP',
       validation: 'Exploit validation',
     },
     rubric: (score: string, stage: string) => `Score ${score}: the stage word carries the number (${stage}). No patch 15, Exposed 35, Hidden 50, Not affected 80, Protected 100; Not PHP and Unreachable carry none.`,

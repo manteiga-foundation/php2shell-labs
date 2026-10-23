@@ -7,7 +7,7 @@
         "port": 80
       },
       "address": "203.0.113.10",
-      "startedAt": "2026-10-23T22:14:53.817Z",
+      "startedAt": "2026-10-23T22:56:34.178Z",
       "validate": true
     },
     {
@@ -22,9 +22,12 @@
           "minor": 1,
           "patch": 26
         },
-        "egg": true
+        "egg": true,
+        "signs": [
+          "logo"
+        ]
       },
-      "ms": 6
+      "ms": 5
     },
     {
       "type": "probe",
@@ -32,15 +35,15 @@
       "label": "One ordinary visit",
       "answer": "yes",
       "detail": "HTTP 200, PHP/7.1.26",
-      "ms": 6
+      "ms": 5
     },
     {
       "type": "probe",
       "id": "egg",
-      "label": "PHP's credit endpoint",
+      "label": "Signs of PHP",
       "answer": "yes",
-      "detail": "answered with the PHP logo",
-      "ms": 6
+      "detail": "the logo query answered with the PHP image",
+      "ms": 5
     },
     {
       "type": "validation",
@@ -54,7 +57,7 @@
           "status": 200,
           "bodyBytes": 0,
           "sentBytes": 50331648,
-          "ms": 4
+          "ms": 3
         },
         "signature": "an empty 200 where the application answered 401 with a page"
       }
@@ -65,7 +68,7 @@
       "label": "Exploit validation",
       "answer": "yes",
       "detail": "an empty 200 where the application answered 401 with a page",
-      "ms": 5
+      "ms": 3
     },
     {
       "type": "assessment",
@@ -108,7 +111,7 @@
     },
     {
       "type": "done",
-      "ms": 11
+      "ms": 9
     }
   ],
   "result": {
@@ -117,8 +120,8 @@
       "port": 80
     },
     "address": "203.0.113.10",
-    "startedAt": "2026-10-23T22:14:53.817Z",
-    "ms": 11,
+    "startedAt": "2026-10-23T22:56:34.178Z",
+    "ms": 9,
     "validate": true,
     "findings": {
       "reachable": true,
@@ -132,6 +135,9 @@
       },
       "versionText": "7.1.26",
       "egg": "yes",
+      "signs": [
+        "logo"
+      ],
       "validation": {
         "verdict": "triggered",
         "baseline": {
@@ -142,7 +148,7 @@
           "status": 200,
           "bodyBytes": 0,
           "sentBytes": 50331648,
-          "ms": 4
+          "ms": 3
         },
         "signature": "an empty 200 where the application answered 401 with a page"
       },

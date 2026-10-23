@@ -80,6 +80,12 @@ describe('assess: the exposure ladder', () => {
     expect(a.stage).toBe('hidden');
   });
 
+  test('no version header and no logo, but a PHP session cookie: hidden, never not-php (the hardened modern host)', () => {
+    const a = assess(phpHost('8.3.0', { poweredBy: null, version: null, versionText: null, egg: 'no', serverSoftware: 'nginx/1.24.0', signs: ['cookie'] }));
+    expect(a.stage).toBe('hidden');
+    expect(a.foundations.phpPresent).toBe(true);
+  });
+
   test('the host answered, no PHP sign anywhere and the egg said no: not PHP, no score', () => {
     const a = assess(phpHost('7.1.26', { poweredBy: null, version: null, versionText: null, egg: 'no', serverSoftware: 'nginx/1.24.0' }));
     expect(a.stage).toBe('not-php');

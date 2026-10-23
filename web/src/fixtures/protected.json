@@ -7,7 +7,7 @@
         "port": 443
       },
       "address": "203.0.113.10",
-      "startedAt": "2026-10-23T22:14:53.832Z",
+      "startedAt": "2026-10-23T22:56:34.190Z",
       "validate": false
     },
     {
@@ -22,7 +22,10 @@
           "minor": 3,
           "patch": 36
         },
-        "egg": true
+        "egg": true,
+        "signs": [
+          "logo"
+        ]
       },
       "ms": 1
     },
@@ -37,9 +40,9 @@
     {
       "type": "probe",
       "id": "egg",
-      "label": "PHP's credit endpoint",
+      "label": "Signs of PHP",
       "answer": "yes",
-      "detail": "answered with the PHP logo",
+      "detail": "the logo query answered with the PHP image",
       "ms": 1
     },
     {
@@ -87,7 +90,7 @@
       "port": 443
     },
     "address": "203.0.113.10",
-    "startedAt": "2026-10-23T22:14:53.832Z",
+    "startedAt": "2026-10-23T22:56:34.190Z",
     "ms": 1,
     "validate": false,
     "findings": {
@@ -102,6 +105,9 @@
       },
       "versionText": "8.3.36",
       "egg": "yes",
+      "signs": [
+        "logo"
+      ],
       "validation": null,
       "errors": []
     },

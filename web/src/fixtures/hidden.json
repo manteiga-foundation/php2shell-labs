@@ -7,7 +7,7 @@
         "port": 443
       },
       "address": "203.0.113.10",
-      "startedAt": "2026-10-23T22:14:53.831Z",
+      "startedAt": "2026-10-23T22:56:34.189Z",
       "validate": false
     },
     {
@@ -18,7 +18,10 @@
         "poweredBy": null,
         "versionText": null,
         "version": null,
-        "egg": true
+        "egg": false,
+        "signs": [
+          "cookie"
+        ]
       },
       "ms": 1
     },
@@ -33,9 +36,9 @@
     {
       "type": "probe",
       "id": "egg",
-      "label": "PHP's credit endpoint",
+      "label": "Signs of PHP",
       "answer": "yes",
-      "detail": "answered with the PHP logo",
+      "detail": "a PHPSESSID cookie",
       "ms": 1
     },
     {
@@ -83,7 +86,7 @@
       "port": 443
     },
     "address": "203.0.113.10",
-    "startedAt": "2026-10-23T22:14:53.831Z",
+    "startedAt": "2026-10-23T22:56:34.189Z",
     "ms": 1,
     "validate": false,
     "findings": {
@@ -93,7 +96,10 @@
       "poweredBy": null,
       "version": null,
       "versionText": null,
-      "egg": "yes",
+      "egg": "no",
+      "signs": [
+        "cookie"
+      ],
       "validation": null,
       "errors": []
     },

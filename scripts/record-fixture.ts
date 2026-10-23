@@ -23,7 +23,8 @@ const validating =
 const FIXTURES: Record<string, { host: string; handler: Handler; validate: boolean }> = {
   'no-patch': { host: 'no-patch.example', handler: validating('7.1.26'), validate: true },
   exposed: { host: 'exposed.example', handler: phpLike('8.2.34'), validate: false },
-  hidden: { host: 'hidden.example', handler: phpLike('8.3.1', { poweredBy: false, server: 'Apache/2.4.58 (Ubuntu)' }), validate: false },
+  // The hardened modern host: no version header, no logo (removed in PHP 5.5), a session cookie as the sign.
+  hidden: { host: 'hidden.example', handler: phpLike('8.3.1', { poweredBy: false, egg: false, cookie: true, server: 'Apache/2.4.58 (Ubuntu)' }), validate: false },
   protected: { host: 'protected.example', handler: phpLike('8.3.36', { server: 'nginx/1.26.2' }), validate: false },
   'not-php': { host: 'not-php.example', handler: () => new Response('<html>home</html>', { headers: { Server: 'nginx/1.24.0', 'Content-Type': 'text/html' } }), validate: true },
 };

@@ -202,7 +202,7 @@ export function renderReport(r: ScanResult, o: TerminalOptions): string {
   out.push('');
 
   // Probes.
-  out.push(`  ${label('Probes', mode)}${paint(f.validation ? 'one visit, the credit query, two posted requests' : 'one visit and the credit query, nothing more', C.dim, mode)}`);
+  out.push(`  ${label('Probes', mode)}${paint(f.validation ? 'one visit, the logo query, two posted requests' : 'one visit and the logo query, nothing more', C.dim, mode)}`);
   const probeCell = (name: string, state: 'yes' | 'no' | 'error' | 'none', good = true) => {
     const m = state === 'yes' ? (good ? yes(mode) : warnMark(mode)) : state === 'no' ? no(mode) : state === 'error' ? paint('?', C.red, mode) : paint('·', C.dim, mode);
     return `${m} ${paint(name, state === 'yes' ? (good ? C.text : C.amber) : C.dim, mode)}`;
@@ -211,7 +211,7 @@ export function renderReport(r: ScanResult, o: TerminalOptions): string {
     ...grid(
       [
         probeCell(`home page HTTP ${f.status ?? '-'}`, f.reachable === true ? 'yes' : f.reachable === false ? 'error' : 'none'),
-        probeCell('PHP credit endpoint', f.egg === 'untested' ? 'none' : f.egg),
+        probeCell('signs of PHP', f.egg === 'untested' ? 'none' : f.egg === 'yes' || f.signs.length > 0 ? 'yes' : f.egg),
         probeCell('exploit validation', f.validation ? (f.validation.verdict === 'triggered' ? 'yes' : 'no') : 'none', false),
       ],
       4,

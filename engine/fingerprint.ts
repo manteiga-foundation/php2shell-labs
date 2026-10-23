@@ -8,6 +8,17 @@ import { extractPhpVersion, type PhpVersion } from './versions';
 
 export const PHP_EGG_QUERY = '?=PHPE9568F34-D428-11d2-A769-00AA001ACF42';
 
+/** The passive signs that PHP runs, beyond a version in a header: the session cookie, links to .php files, the logo egg (PHP 5.4 and older). */
+export type PhpSign = 'cookie' | 'links' | 'logo';
+
+/** Reads the signs of PHP in one answer: a PHPSESSID cookie, .php links or form actions in the page. */
+export function phpSigns(headers: Record<string, string>, body: Buffer): PhpSign[] {
+  const signs: PhpSign[] = [];
+  if (/(^|,\s*)PHPSESSID=/i.test(headers['set-cookie'] ?? '')) signs.push('cookie');
+  if ((headers['content-type'] ?? '').includes('html') && /(?:href|action|src)=["']?[^"'\s>]*\.php(?:[?"'\s>]|$)/i.test(body.subarray(0, 512 * 1024).toString('latin1'))) signs.push('links');
+  return signs;
+}
+
 export type Fingerprint =
   | {
       ok: true;
@@ -17,8 +28,10 @@ export type Fingerprint =
       /** The PHP version the host advertises, or null when hidden. */
       versionText: string | null;
       version: PhpVersion | null;
-      /** PHP's credit/logo endpoint answered: PHP is running even if the version is hidden. */
+      /** PHP's logo endpoint answered with an image: PHP 5.4 or older with expose_php on. Removed in PHP 5.5. */
       egg: boolean;
+      /** The signs of PHP in the home page's answer, so a hidden version on a modern host is not mistaken for no PHP. */
+      signs: PhpSign[];
     }
   | { ok: false; error: 'unreachable' };
 
@@ -85,9 +98,10 @@ export async function fingerprint(
   const serverSoftware = home.headers['server'] ?? null;
   const poweredBy = home.headers['x-powered-by'] ?? null;
   const version = extractPhpVersion({ server: serverSoftware ?? undefined, poweredBy: poweredBy ?? undefined });
+  const signs = phpSigns(home.headers, home.body);
 
-  // The egg: only PHP answers the credit query with a logo. Even with expose_php off, the
-  // response differs; with it on (the common case on old hosts) it also carries the version.
+  // The egg: PHP 5.4 and older with expose_php on answer the logo query with an image, and the
+  // version with it. PHP 5.5 removed the easter eggs, so "no" says nothing about a modern host.
   let egg = false;
   try {
     const eggRes = await request(host, port, tls, `/${PHP_EGG_QUERY}`, timeoutMs, address);
@@ -106,6 +120,7 @@ export async function fingerprint(
           versionText: `${eggVersion.major}.${eggVersion.minor}.${eggVersion.patch}`,
           version: eggVersion,
           egg,
+          signs: egg ? [...signs, 'logo'] : signs,
         };
       }
     }
@@ -121,5 +136,6 @@ export async function fingerprint(
     versionText: version ? `${version.major}.${version.minor}.${version.patch}` : null,
     version,
     egg,
+    signs: egg ? [...signs, 'logo'] : signs,
   };
 }

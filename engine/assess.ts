@@ -7,6 +7,7 @@
 // a hidden version and never contradicts a known one. Runs on partial findings too: the live
 // report re-assesses after every event and every rule must read sensibly half-way.
 
+import type { PhpSign } from './fingerprint';
 import { classifyPhpVersion, FIXED_RELEASES, type PhpVersion } from './versions';
 
 export type ProbeAnswer = 'yes' | 'no' | 'error' | 'untested';
@@ -28,8 +29,10 @@ export interface Findings {
   /** The PHP version the host advertises; null when hidden or not yet read. */
   version: PhpVersion | null;
   versionText: string | null;
-  /** PHP's credit endpoint answered with an image: PHP runs even when the version is hidden. */
+  /** PHP's logo endpoint answered with an image: PHP 5.4 or older with expose_php on (removed in 5.5). */
   egg: ProbeAnswer;
+  /** The other passive signs of PHP: a PHPSESSID cookie, .php links on the page, the logo. */
+  signs: PhpSign[];
   /** Consent-gated; null when it did not run. */
   validation: ValidationEvidence | null;
   errors: string[];
@@ -44,6 +47,7 @@ export function emptyFindings(): Findings {
     version: null,
     versionText: null,
     egg: 'untested',
+    signs: [],
     validation: null,
     errors: [],
   };
@@ -196,7 +200,7 @@ export function assess(f: Findings): Assessment {
 
   const phpHeader = f.poweredBy !== null && /php/i.test(f.poweredBy);
   // PHP is present when any sign says so; absent only once the egg has answered no and nothing else said PHP.
-  const phpPresent: boolean | null = f.version !== null || phpHeader || f.egg === 'yes' ? true : f.egg === 'no' ? false : null;
+  const phpPresent: boolean | null = f.version !== null || phpHeader || f.egg === 'yes' || f.signs.length > 0 ? true : f.egg === 'no' ? false : null;
   const cls = f.version ? classifyPhpVersion(f.version) : null;
   const branch = f.version ? `${f.version.major}.${f.version.minor}` : null;
   const fixed = branch && FIXED_RELEASES[branch] ? versionText(FIXED_RELEASES[branch]) : null;

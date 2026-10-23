@@ -2,6 +2,7 @@
 // edge) consumes. Types only; no runtime imports, so the web can type-check without Bun.
 
 import type { Assessment, Findings, ValidationEvidence } from './assess';
+import type { PhpSign } from './fingerprint';
 import type { Target } from './target';
 import type { PhpVersion } from './versions';
 
@@ -12,6 +13,7 @@ export interface FingerprintWire {
   versionText: string | null;
   version: PhpVersion | null;
   egg: boolean;
+  signs: PhpSign[];
 }
 
 export type ScanEvent =

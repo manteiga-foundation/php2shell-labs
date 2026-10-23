@@ -93,6 +93,7 @@ export function applyEvent(state: ReportState, event: StreamEvent): ReportState 
       findings.version = fp.version;
       findings.versionText = fp.versionText;
       findings.egg = fp.egg ? 'yes' : 'no';
+      findings.signs = fp.signs ?? [];
       return { ...state, findings, assessment: assess(findings) };
     }
     case 'validation': {

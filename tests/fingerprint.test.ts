@@ -57,6 +57,32 @@ describe('fingerprint', () => {
     expect(fp.serverSoftware).toBe('nginx/1.24.0');
   });
 
+  test('a modern PHP with expose_php off still shows itself: a PHPSESSID cookie and .php links on the page', async () => {
+    // The logo query was removed in PHP 5.5, so on anything current the egg answers no; the
+    // session cookie and the links the application prints are the signs left.
+    const target = fixture(
+      () =>
+        new Response('<html><body><form action="/login.php"><a href="/index.php?p=1">in</a></form></body></html>', {
+          headers: { 'Content-Type': 'text/html', Server: 'nginx/1.24.0', 'Set-Cookie': 'PHPSESSID=abc123; path=/; HttpOnly' },
+        }),
+    );
+    const [host, port] = target.split(':');
+    const fp = await fingerprint(host, Number(port), false);
+    expect(fp.ok).toBe(true);
+    if (!fp.ok) return;
+    expect(fp.egg).toBe(false);
+    expect(fp.versionText).toBeNull();
+    expect(fp.signs).toEqual(['cookie', 'links']);
+  });
+
+  test('a static site without any of the signs has an empty list', async () => {
+    const target = fixture(() => new Response('<html><a href="/about.html">x</a></html>', { headers: { 'Content-Type': 'text/html', Server: 'nginx/1.24.0' } }));
+    const [host, port] = target.split(':');
+    const fp = await fingerprint(host, Number(port), false);
+    if (!fp.ok) throw new Error('unreachable');
+    expect(fp.signs).toEqual([]);
+  });
+
   test('a refused connection is reported, not thrown', async () => {
     const fp = await fingerprint('127.0.0.1', 9, false, 500);
     expect(fp).toEqual({ ok: false, error: 'unreachable' });

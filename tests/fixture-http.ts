@@ -23,7 +23,7 @@ export function startFixture(
 }
 
 /** The header shape rest.vulnweb.com showed us: X-Powered-By + the PHP egg. */
-export function phpLike(version: string, opts: { egg?: boolean; poweredBy?: boolean; server?: string } = {}) {
+export function phpLike(version: string, opts: { egg?: boolean; poweredBy?: boolean; server?: string; cookie?: boolean } = {}) {
   const egg = opts.egg ?? true;
   const poweredBy = opts.poweredBy ?? true;
   return (req: Request): Response => {
@@ -41,6 +41,7 @@ export function phpLike(version: string, opts: { egg?: boolean; poweredBy?: bool
         'Content-Type': 'text/html',
         ...(opts.server ? { Server: opts.server } : {}),
         ...(poweredBy ? { 'X-Powered-By': `PHP/${version}` } : {}),
+        ...(opts.cookie ? { 'Set-Cookie': 'PHPSESSID=0123456789abcdef; path=/; HttpOnly' } : {}),
       },
     });
   };

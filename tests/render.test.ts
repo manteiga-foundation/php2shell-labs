@@ -25,7 +25,7 @@ describe('the PDF renderer', () => {
   });
 
   test('prints a landscape Letter PDF with one page per slide, under 1.5 MB, with the fonts embedded', async () => {
-    const res = await pdfFor({ result: protectedFixture.result, shareUrl: 'https://quantumreadylabs.com/r/abc', generatedAt: '2026-10-18T12:00:00Z' });
+    const res = await pdfFor({ result: protectedFixture.result, shareUrl: 'https://php2shell-labs.taptok-test.workers.dev/r/abc', generatedAt: '2026-10-18T12:00:00Z' });
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('application/pdf');
     const bytes = new Uint8Array(await res.arrayBuffer());
@@ -54,15 +54,9 @@ describe('the PDF renderer', () => {
     expect(res.status).toBe(400);
   });
 
-  test('prints letters: one portrait page per institution', async () => {
-    const res = await fetch(`${server.url}/letters.pdf`, {
-      method: 'POST',
-      headers: { authorization: 'Bearer render-test', 'content-type': 'application/json' },
-      body: JSON.stringify({ generatedAt: '2026-10-18T12:00:00Z', signer: { name: 'A. Signer', title: 'Manteiga Foundation' }, letters: [{ result: protectedFixture.result, institution: 'One', shareUrl: 'https://quantumreadylabs.com/r/a' }, { result: protectedFixture.result, institution: 'Two', shareUrl: null }] }),
-    });
-    expect(res.status).toBe(200);
-    const text = Buffer.from(await res.arrayBuffer()).toString('latin1');
-    expect((text.match(/\/Type\s*\/Page[^s]/g) ?? []).length).toBe(2);
-    expect(text).toMatch(/\/MediaBox\s*\[\s*0\s+0\s+612\s+792\s*\]/);
+  test('names the file after the host and the day', async () => {
+    const res = await pdfFor({ result: protectedFixture.result, generatedAt: '2026-10-23T12:00:00Z', shareUrl: null });
+    expect(res.headers.get('content-disposition')).toBe('attachment; filename="php2shell-exposure-protected.example-2026-10-23.pdf"');
+    await res.arrayBuffer();
   }, 60000);
 });
