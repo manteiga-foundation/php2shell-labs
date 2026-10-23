@@ -4,7 +4,7 @@ import { chromium } from 'playwright';
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const port = process.argv[2] ?? '5180';
+const port = process.argv[2] ?? '5190';
 const base = `http://127.0.0.1:${port}`;
 const out = 'docs/readme';
 mkdirSync(out, { recursive: true });
@@ -14,7 +14,7 @@ const browser = await chromium.launch({ args: ['--use-angle=metal', '--enable-gp
 // Hero: the finished report, desktop.
 {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
-  await page.goto(`${base}/scan?host=protected.example&demo=protected`);
+  await page.goto(`${base}/scan?host=no-patch.example:80&demo=no-patch`);
   await page.getByTestId('next-step').waitFor({ timeout: 15000 });
   await page.waitForTimeout(900);
   await page.screenshot({ path: `${out}/hero.png` });
@@ -24,10 +24,10 @@ const browser = await chromium.launch({ args: ['--use-angle=metal', '--enable-gp
 
 // GIF: entry, typing, Enter, the ring climbing to the verdict. Frames every 100 ms, 960 px wide.
 {
-  const frames = join(process.env.TMPDIR ?? '/tmp', `qrl-frames-${Date.now()}`);
+  const frames = join(process.env.TMPDIR ?? '/tmp', `p2s-frames-${Date.now()}`);
   mkdirSync(frames, { recursive: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
-  await page.goto(`${base}/?demo=protected`);
+  await page.goto(`${base}/?demo=no-patch`);
   const field = page.getByRole('textbox', { name: 'Host' });
   await field.waitFor({ state: 'visible' });
   await page.waitForTimeout(400);
@@ -36,7 +36,7 @@ const browser = await chromium.launch({ args: ['--use-angle=metal', '--enable-gp
     await page.screenshot({ path: join(frames, `f${String(n++).padStart(4, '0')}.png`) });
   };
   for (let i = 0; i < 6; i++) await snap();
-  for (const ch of 'protected.example') {
+  for (const ch of 'no-patch.example:80') {
     await field.type(ch, { delay: 0 });
     await snap();
   }

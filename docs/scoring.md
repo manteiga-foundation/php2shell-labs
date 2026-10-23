@@ -1,69 +1,58 @@
 # How we score
 
-The score measures one thing: where a host stands on the post-quantum transition. It is not a
-general TLS grade. The stage name is what a reader acts on; the number is for those who want one.
-The code is `engine/assess.ts`; this page and that file change together.
+The score measures one thing: a host's exposure to PHP2Shell (CVE-2026-109618 and
+CVE-2026-109619). It is not a general PHP or web hygiene grade. The stage name is what a reader acts
+on; the number is for those who want one. The code is `engine/assess.ts`; this page and that file
+change together.
 
 ## The idea the score rests on
 
-Confidentiality is urgent, authentication is not yet.
+The version decides.
 
-A quantum computer able to break RSA and elliptic curves does not exist. The threat today is
-"harvest now, decrypt later": encrypted traffic recorded now falls when such a machine exists. That
-is solved in the key exchange, and the fix (hybrid post-quantum key exchange, X25519MLKEM768) is
-already shipped by every current browser, OpenSSL 3.5 and the large CDNs. A certificate, by
-contrast, authenticates a connection at the moment it happens; a signature cannot be forged
-retroactively, so there is no harvest-now risk, and the public Web PKI has no post-quantum roots
-to move to yet. So the key exchange decides the stage, and the certificate is reported, explained,
-and never alarmed.
+PHP2Shell lives in PHP 5.4.0 through 8.5.11, and the fixed releases are known: 8.5.12, 8.4.27,
+8.3.36 and 8.2.35 (`engine/versions.ts`). So what a host advertises places it on the ladder. The
+consent-gated validation is evidence that refines a hidden version; it never contradicts a known
+one and never raises a score.
 
 ## Stages
 
-| Stage | Technically | Meaning |
+| Stage | Technically | Score |
 |---|---|---|
-| Exposed | No TLS 1.3 | Sessions can be recorded today and decrypted later. |
-| At risk | TLS 1.3, classical key exchange only | Safe today; recordable now, decryptable when a large quantum computer exists. |
-| Protected | A hybrid post-quantum group is accepted | Confidentiality is protected against future quantum decryption. |
-| Ready | Protected, and the foundations are in place | No RSA key transport, a short-lived (100 days or less) trusted certificate. Ready for what comes next. |
+| No patch | 5.4.0 through 8.1.x: affected, and the branch is end-of-life | 15 |
+| Exposed | 8.2.0 through 8.5.11, below the branch's fixed release | 35 |
+| Hidden | PHP present, version not disclosed | 50 |
+| Not affected | Older than 5.4.0 | 80 |
+| Protected | The branch's fixed release or newer | 100 |
 
-Two more words cover the cases where the ladder does not apply: Unreachable (no TLS server
-answered) and Inconclusive (the server negotiated TLS 1.3 but answered none of the single-group
-probes, which points at a middlebox or a HelloRetryRequest problem; the result is not trusted).
+Unreachable (no web server answered) and Not PHP (nothing answered as PHP) carry no score: the
+ring shows the word alone.
 
-The pre-standard Kyber draft (X25519Kyber768Draft00) alone does not count as hybrid: browsers
-stopped offering it in 2024.
+Why one number per stage: the reader acts on the stage, and a finer number would pretend to a
+precision the two requests do not have. Hidden sits above Exposed because the host may be patched,
+and below Not affected because it may not be.
 
-## Points (0 to 100)
+## How a host is placed
 
-| Part | Points | Rule |
-|---|---|---|
-| Key exchange | 60 | Hybrid accepted 60; TLS 1.3 classical 30; TLS 1.2 ephemeral only 10; RSA key transport only 0. |
-| No RSA key transport | 10 | TLS 1.2 RSA key-transport suites refused. |
-| Short-lived certificate | 8 | Leaf lifetime 100 days or less (automation, in practice). |
-| Prefers hybrid | 6 | Offered what current browsers offer, the server picks the hybrid group. |
-| Trusted chain | 6 | The chain validates against the trust store. |
-| Certificate | 10 | Post-quantum signed chain 10; ECDSA or Ed25519 leaf 5; RSA-2048 leaf 3; other 4. |
+1. Reachable: the front page answered an ordinary GET. Otherwise Unreachable.
+2. Version: read from `X-Powered-By` or `Server` on the front page, or from the logo query's
+   answer (PHP 5.4 and older with `expose_php` on). Classified by `classifyPhpVersion`: patched,
+   vulnerable, no-patch, below-range.
+3. PHP present, when no version was read: `X-Powered-By: PHP`, a `PHPSESSID` cookie, links or form
+   actions to `.php` pages, or the logo image. Any one of them makes the stage Hidden. None of them,
+   with the logo query answered, makes it Not PHP. The logo query alone proves nothing on a modern
+   host: PHP 5.5 removed the easter eggs.
+4. Validation, with consent and only when PHP is present. Reproduced on a host inside the range: a
+   note, and a Hidden host becomes Exposed. Not reproduced: a note; the stage stands. Reproduced on
+   a host the version places outside the range: a note that the two disagree, for a human to read.
 
-Unreachable scores 0. The weights say what the tool believes: the key exchange is most of the
-story, the foundations are the habits that make the next step cheap, and the certificate is
-weighed lightly because nobody can act on it yet.
+## Foundations
 
-## The one next step
+Four facts under the cards, reported and never scored: the host answers an ordinary request, PHP
+was identified, the version is disclosed, the branch still receives fixes.
 
-Each report names one step, chosen in this order: enable TLS 1.3 (Exposed); enable hybrid key
-exchange (At risk); retire RSA key transport (Protected with it still reachable); shorten
-certificate lifetimes and automate (Protected with a long-lived certificate); nothing to do today,
-watch for post-quantum certificates (Ready).
+## Notes the report can carry
 
-## Standards
-
-NIST FIPS 203 (ML-KEM), FIPS 204 (ML-DSA), FIPS 205 (SLH-DSA); NIST IR 8547 (quantum-vulnerable
-algorithms deprecated after 2030, disallowed after 2035); NSA CNSA 2.0; IETF
-draft-ietf-tls-ecdhe-mlkem (the hybrid groups and their code points).
-
-## Open questions
-
-- Is 100 days the right line for "short-lived"? The CA/Browser Forum's schedule reaches 47 days
-  in 2029.
-- Should RSA key transport reachable keep a host out of Ready? Cloudflare and Google both still
-  accept it for old clients; today it does.
+- `eol-branch`: the branch is end-of-life (said on Not affected hosts: not a clean bill of health).
+- `validation-reproduced`, with the signature observed.
+- `validation-not-reproduced`: the memory limit may sit above 48 MB.
+- `validation-disagrees`: the signature and the version do not agree.
