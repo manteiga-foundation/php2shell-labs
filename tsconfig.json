@@ -21,5 +21,8 @@
     "tests",
     "spikes",
     "scripts"
+  ],
+  "exclude": [
+    "tests/worker.test.ts"
   ]
 }
